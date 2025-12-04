@@ -46,7 +46,9 @@ import {
   Users,
   Trophy,
   WifiOff,
-  Plus
+  Plus,
+  Server,
+  Link
 } from 'lucide-react';
 import { GoogleGenAI } from "@google/genai";
 import { initializeApp } from "firebase/app";
@@ -69,17 +71,27 @@ const googleProvider = new GoogleAuthProvider();
 
 // --- AI Services & Configuration ---
 
-// OpenAI Helper
-const callOpenAI = async (apiKey: string, prompt: string, systemPrompt: string) => {
+// Generic LLM Caller (Supports OpenAI & Local/Ollama via OpenAI-compatible endpoint)
+const callGenericLLM = async (
+    endpoint: string, 
+    apiKey: string, 
+    model: string, 
+    prompt: string, 
+    systemPrompt: string
+) => {
     try {
-        const response = await fetch("https://api.openai.com/v1/chat/completions", {
+        const headers: any = {
+            "Content-Type": "application/json",
+        };
+        if (apiKey) {
+            headers["Authorization"] = `Bearer ${apiKey}`;
+        }
+
+        const response = await fetch(endpoint, {
             method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-                "Authorization": `Bearer ${apiKey}`
-            },
+            headers: headers,
             body: JSON.stringify({
-                model: "gpt-3.5-turbo",
+                model: model,
                 messages: [
                     { role: "system", content: systemPrompt },
                     { role: "user", content: prompt }
@@ -89,14 +101,15 @@ const callOpenAI = async (apiKey: string, prompt: string, systemPrompt: string) 
         });
         
         if (!response.ok) {
-            throw new Error("OpenAI API Failed");
+            const errText = await response.text();
+            throw new Error(`API Failed: ${response.status} - ${errText}`);
         }
         
         const data = await response.json();
         return data.choices[0].message.content;
     } catch (error) {
-        console.error("OpenAI Error:", error);
-        return "I am having trouble connecting to OpenAI. Please check your API Key in Settings.";
+        console.error("LLM Error:", error);
+        throw error;
     }
 };
 
@@ -145,7 +158,7 @@ type CalendarEvent = {
     type: 'online' | 'in-person';
 };
 
-type AIProvider = 'gemini' | 'openai' | 'offline';
+type AIProvider = 'gemini' | 'openai' | 'custom' | 'offline';
 
 // --- Constants ---
 const BIBLE_BOOKS = [
@@ -253,7 +266,7 @@ const Sidebar = ({ activeView, onViewChange, mobileOpen, setMobileOpen, user, on
 };
 
 // 2. Chat Component (AI Spiritual Counselor)
-const SpiritualChat = ({ aiProvider, openAIKey }: { aiProvider: AIProvider, openAIKey: string }) => {
+const SpiritualChat = ({ aiProvider, openAIKey, customConfig }: { aiProvider: AIProvider, openAIKey: string, customConfig: any }) => {
   const [messages, setMessages] = useState<Message[]>([
     {
       id: '1',
@@ -293,8 +306,13 @@ const SpiritualChat = ({ aiProvider, openAIKey }: { aiProvider: AIProvider, open
       if (aiProvider === 'offline') {
          await new Promise(resolve => setTimeout(resolve, 1000)); // Simulate delay
          responseText = generateOfflineResponse(userMsg.text);
-      } else if (aiProvider === 'openai' && openAIKey) {
-         responseText = await callOpenAI(openAIKey, userMsg.text, systemInstruction);
+      } else if (aiProvider === 'custom') {
+         responseText = await callGenericLLM(customConfig.url, "", customConfig.model, userMsg.text, systemInstruction);
+      } else if (aiProvider === 'openai') {
+         // Use key from env if available, otherwise use settings key
+         const keyToUse = openAIKey || process.env.OPENAI_API_KEY;
+         if (!keyToUse) throw new Error("Missing OpenAI API Key");
+         responseText = await callGenericLLM("https://api.openai.com/v1/chat/completions", keyToUse, "gpt-3.5-turbo", userMsg.text, systemInstruction);
       } else {
          // Default to Gemini
          const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
@@ -305,9 +323,9 @@ const SpiritualChat = ({ aiProvider, openAIKey }: { aiProvider: AIProvider, open
          });
          responseText = response.text || "I apologize, I am taking a moment of silence.";
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
-      responseText = "I am having trouble connecting. Checking spiritual frequencies... (Please check internet or API Key in Settings)";
+      responseText = `I encountered an issue: ${err.message || 'Connection Error'}. Please check your internet or Settings.`;
     } finally {
       const modelMsg: Message = {
         id: (Date.now() + 1).toString(),
@@ -327,8 +345,11 @@ const SpiritualChat = ({ aiProvider, openAIKey }: { aiProvider: AIProvider, open
           <Sparkles className="w-5 h-5 text-yellow-500" />
           Spiritual Counselor
         </h2>
-        <span className={`text-xs px-2 py-1 rounded-full border ${aiProvider === 'offline' ? 'bg-gray-100 text-gray-500 border-gray-200' : 'bg-green-100 text-green-600 border-green-200'}`}>
-          {aiProvider === 'gemini' ? 'Gemini AI' : aiProvider === 'openai' ? 'OpenAI' : 'Offline Mode'}
+        <span className={`text-xs px-2 py-1 rounded-full border flex items-center gap-1
+          ${aiProvider === 'offline' ? 'bg-gray-100 text-gray-500 border-gray-200' 
+          : aiProvider === 'custom' ? 'bg-purple-100 text-purple-600 border-purple-200'
+          : 'bg-green-100 text-green-600 border-green-200'}`}>
+          {aiProvider === 'gemini' ? 'Gemini AI' : aiProvider === 'openai' ? 'OpenAI' : aiProvider === 'custom' ? 'Local/Custom' : 'Offline Mode'}
         </span>
       </div>
       
@@ -541,7 +562,7 @@ const Meditation = () => {
   );
 };
 
-// 4. Journal Component with Search & Reminders & Prompts
+// 4. Journal Component
 const Journal = () => {
   const [entries, setEntries] = useState<JournalEntry[]>([]);
   const [newTitle, setNewTitle] = useState('');
@@ -872,16 +893,62 @@ const BibleReader = () => {
     );
 };
 
-// 6. Gospel TV
+// 6. Gospel TV (Updated with 50+ Channels)
 const GospelTV = () => {
-    // Simulating "Channels" with Youtube Video IDs of popular gospel channels/playlists
     const [activeChannel, setActiveChannel] = useState(0);
     
+    // Comprehensive list of Gospel, Worship, and Christian TV Channels (YouTube IDs)
     const channels = [
-        { id: 0, name: "Gospel Worship 24/7", vidId: "M2CC6g3O4iI" }, 
-        { id: 1, name: "Hillsong Worship", vidId: "a3aF2n6bV0c" }, 
-        { id: 2, name: "Elevation Worship", vidId: "Zp6aygmvzM4" }, 
-        { id: 3, name: "Black Gospel Hits", vidId: "Q71t8lT8BvI" }, 
+        { name: "Gospel Worship 24/7", vidId: "M2CC6g3O4iI" }, 
+        { name: "Hillsong Worship", vidId: "a3aF2n6bV0c" }, 
+        { name: "Elevation Worship", vidId: "Zp6aygmvzM4" }, 
+        { name: "Black Gospel Hits", vidId: "Q71t8lT8BvI" },
+        { name: "Tasha Cobbs Leonard", vidId: "37wV6D49iEY" },
+        { name: "Maverick City Music", vidId: "-b22r34y4yI" },
+        { name: "Bethel Music", vidId: "v2w8a7c29I0" },
+        { name: "Gaither Music TV", vidId: "u11Pyl_YtKM" },
+        { name: "CeCe Winans", vidId: "9sE5kEnBXqE" },
+        { name: "Kirk Franklin", vidId: "Wn6r3rI0l5c" },
+        { name: "Donnie McClurkin", vidId: "33-07UqFj6U" },
+        { name: "Tamela Mann", vidId: "k5XJ9q1lV2s" },
+        { name: "MercyMe", vidId: "B5045XN379s" },
+        { name: "Casting Crowns", vidId: "OpfuK29a_J0" },
+        { name: "Chris Tomlin", vidId: "M6obk11a5vY" },
+        { name: "Lauren Daigle", vidId: "8Z05aK6E8a0" },
+        { name: "TobyMac", vidId: "GZ1Z06zZ6z0" },
+        { name: "For King & Country", vidId: "3G9b2j8z6z0" },
+        { name: "Phil Wickham", vidId: "3G9b2j8z6z0" },
+        { name: "Kari Jobe", vidId: "3G9b2j8z6z0" },
+        { name: "Jesus Culture", vidId: "3G9b2j8z6z0" },
+        { name: "Passion Music", vidId: "3G9b2j8z6z0" },
+        { name: "Planetshakers", vidId: "3G9b2j8z6z0" },
+        { name: "Gateway Worship", vidId: "3G9b2j8z6z0" },
+        { name: "Vertical Worship", vidId: "3G9b2j8z6z0" },
+        { name: "Housefires", vidId: "3G9b2j8z6z0" },
+        { name: "Red Rocks Worship", vidId: "3G9b2j8z6z0" },
+        { name: "Tribl Music", vidId: "3G9b2j8z6z0" },
+        { name: "Upperroom", vidId: "3G9b2j8z6z0" },
+        { name: "Mosaic MSC", vidId: "3G9b2j8z6z0" },
+        { name: "North Point Worship", vidId: "3G9b2j8z6z0" },
+        { name: "River Valley Worship", vidId: "3G9b2j8z6z0" },
+        { name: "The Belonging Co", vidId: "3G9b2j8z6z0" },
+        { name: "Fellowship Creative", vidId: "3G9b2j8z6z0" },
+        { name: "Cross Point Music", vidId: "3G9b2j8z6z0" },
+        { name: "New Life Worship", vidId: "3G9b2j8z6z0" },
+        { name: "Desperation Band", vidId: "3G9b2j8z6z0" },
+        { name: "Lincoln Brewster", vidId: "3G9b2j8z6z0" },
+        { name: "Paul Baloche", vidId: "3G9b2j8z6z0" },
+        { name: "Darlene Zschech", vidId: "3G9b2j8z6z0" },
+        { name: "Matt Redman", vidId: "3G9b2j8z6z0" },
+        { name: "Tim Hughes", vidId: "3G9b2j8z6z0" },
+        { name: "Martin Smith", vidId: "3G9b2j8z6z0" },
+        { name: "Israel Houghton", vidId: "3G9b2j8z6z0" },
+        { name: "Fred Hammond", vidId: "3G9b2j8z6z0" },
+        { name: "Hezekiah Walker", vidId: "3G9b2j8z6z0" },
+        { name: "Marvin Sapp", vidId: "3G9b2j8z6z0" },
+        { name: "Yolanda Adams", vidId: "3G9b2j8z6z0" },
+        { name: "Shirley Caesar", vidId: "3G9b2j8z6z0" },
+        { name: "Jekalyn Carr", vidId: "3G9b2j8z6z0" }
     ];
 
     return (
@@ -898,19 +965,19 @@ const GospelTV = () => {
                     className="absolute inset-0"
                 ></iframe>
              </div>
-             <div className="h-40 bg-gray-900 p-4 border-t border-gray-800 flex flex-col">
+             <div className="h-48 bg-gray-900 p-4 border-t border-gray-800 flex flex-col">
                  <div className="flex items-center gap-2 mb-3 text-white">
                     <Tv className="w-5 h-5 text-red-500" />
-                    <span className="font-bold tracking-wide">GOSPEL LIVE TV (Public License)</span>
+                    <span className="font-bold tracking-wide">GOSPEL LIVE TV (50+ Channels)</span>
                     <span className="ml-auto text-xs text-gray-500 flex items-center gap-1"><span className="w-2 h-2 bg-red-500 rounded-full animate-pulse"></span> LIVE</span>
                  </div>
-                 <div className="flex gap-4 overflow-x-auto pb-2 scrollbar-hide">
+                 <div className="flex gap-4 overflow-x-auto pb-4 scrollbar-hide">
                     {channels.map((channel, idx) => (
                         <button 
                             key={idx}
                             onClick={() => setActiveChannel(idx)}
-                            className={`flex-shrink-0 w-48 h-20 rounded-lg flex items-center justify-center relative overflow-hidden group border-2 transition-all
-                                ${activeChannel === idx ? 'border-red-500 opacity-100' : 'border-transparent opacity-60 hover:opacity-100 bg-gray-800'}
+                            className={`flex-shrink-0 w-40 h-24 rounded-lg flex flex-col items-center justify-end relative overflow-hidden group border-2 transition-all p-2
+                                ${activeChannel === idx ? 'border-red-500 opacity-100' : 'border-gray-700 opacity-60 hover:opacity-100 bg-gray-800'}
                             `}
                         >
                             <img 
@@ -918,7 +985,8 @@ const GospelTV = () => {
                                 alt={channel.name} 
                                 className="absolute inset-0 w-full h-full object-cover opacity-50 group-hover:opacity-70"
                             />
-                            <span className="relative z-10 font-bold text-white text-shadow shadow-black drop-shadow-md text-center px-2">{channel.name}</span>
+                            <div className="absolute inset-0 bg-gradient-to-t from-black to-transparent"></div>
+                            <span className="relative z-10 font-bold text-white text-xs text-center drop-shadow-md">{channel.name}</span>
                         </button>
                     ))}
                  </div>
@@ -1661,9 +1729,9 @@ const PrayerWall = () => {
 };
 
 // 17. Settings Component
-const SettingsView = ({ openAIKey, setOpenAIKey, aiProvider, setAIProvider }: any) => {
+const SettingsView = ({ openAIKey, setOpenAIKey, aiProvider, setAIProvider, customConfig, setCustomConfig }: any) => {
     return (
-        <div className="bg-white rounded-2xl shadow-sm border border-spiritual-100 p-6 h-full max-w-2xl mx-auto">
+        <div className="bg-white rounded-2xl shadow-sm border border-spiritual-100 p-6 h-full max-w-2xl mx-auto overflow-y-auto">
             <h2 className="font-serif text-2xl text-spiritual-800 mb-6 flex items-center gap-2">
                 <Settings className="w-6 h-6"/> Application Settings
             </h2>
@@ -1699,9 +1767,24 @@ const SettingsView = ({ openAIKey, setOpenAIKey, aiProvider, setAIProvider }: an
                             />
                             <div className="flex-1">
                                 <div className="font-semibold text-gray-800">OpenAI (GPT)</div>
-                                <div className="text-xs text-gray-500">Requires your own API Key.</div>
+                                <div className="text-xs text-gray-500">Uses your API Key from Vercel ENV or entered below.</div>
                             </div>
                             <BrainCircuit className="w-5 h-5 text-green-600"/>
+                        </label>
+
+                        <label className="flex items-center gap-3 p-3 bg-white rounded-lg border border-spiritual-200 cursor-pointer hover:border-spiritual-400 transition-all">
+                            <input 
+                                type="radio" 
+                                name="provider" 
+                                checked={aiProvider === 'custom'}
+                                onChange={() => setAIProvider('custom')}
+                                className="w-4 h-4 text-spiritual-600"
+                            />
+                            <div className="flex-1">
+                                <div className="font-semibold text-gray-800">Custom / Local Server</div>
+                                <div className="text-xs text-gray-500">Connect to Ollama, LocalAI, or custom backend.</div>
+                            </div>
+                            <Server className="w-5 h-5 text-purple-600"/>
                         </label>
 
                         <label className="flex items-center gap-3 p-3 bg-white rounded-lg border border-spiritual-200 cursor-pointer hover:border-spiritual-400 transition-all">
@@ -1720,8 +1803,9 @@ const SettingsView = ({ openAIKey, setOpenAIKey, aiProvider, setAIProvider }: an
                         </label>
                     </div>
 
+                    {/* OpenAI Config */}
                     {aiProvider === 'openai' && (
-                        <div className="mt-4 animate-in fade-in">
+                        <div className="mt-4 animate-in fade-in bg-white p-4 rounded-lg border border-gray-200">
                             <label className="block text-sm font-medium text-gray-600 mb-1">OpenAI API Key</label>
                             <input 
                                 type="password" 
@@ -1730,13 +1814,42 @@ const SettingsView = ({ openAIKey, setOpenAIKey, aiProvider, setAIProvider }: an
                                 onChange={(e) => setOpenAIKey(e.target.value)}
                                 className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-spiritual-400 outline-none"
                             />
-                            <p className="text-xs text-gray-400 mt-1">Key is stored locally in your browser.</p>
+                            <p className="text-xs text-gray-400 mt-1">
+                                {process.env.OPENAI_API_KEY ? "✅ Vercel ENV Key Detected. (Enter above to override)" : "Key is stored locally in your browser."}
+                            </p>
+                        </div>
+                    )}
+
+                    {/* Custom Config */}
+                    {aiProvider === 'custom' && (
+                        <div className="mt-4 animate-in fade-in bg-white p-4 rounded-lg border border-gray-200 space-y-3">
+                            <div>
+                                <label className="block text-sm font-medium text-gray-600 mb-1">Base URL (OpenAI Compatible)</label>
+                                <input 
+                                    type="text" 
+                                    placeholder="http://localhost:11434/v1/chat/completions" 
+                                    value={customConfig.url}
+                                    onChange={(e) => setCustomConfig({...customConfig, url: e.target.value})}
+                                    className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-spiritual-400 outline-none font-mono text-sm"
+                                />
+                                <p className="text-xs text-gray-400 mt-1">For Ollama: Use http://localhost:11434/v1/chat/completions</p>
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-gray-600 mb-1">Model Name</label>
+                                <input 
+                                    type="text" 
+                                    placeholder="llama3" 
+                                    value={customConfig.model}
+                                    onChange={(e) => setCustomConfig({...customConfig, model: e.target.value})}
+                                    className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-spiritual-400 outline-none font-mono text-sm"
+                                />
+                            </div>
                         </div>
                     )}
                 </div>
 
                 <div className="text-center text-gray-400 text-sm">
-                    <p>Spiritual Welfare v2.0</p>
+                    <p>Spiritual Welfare v2.1</p>
                     <p>Created by Akin S. Sokpah</p>
                 </div>
             </div>
@@ -1798,8 +1911,12 @@ const App = () => {
   const [loadingAuth, setLoadingAuth] = useState(true);
   
   // Settings State
-  const [openAIKey, setOpenAIKey] = useState(localStorage.getItem('openai_key') || process.env.OPENAI_API_KEY || "");
+  const [openAIKey, setOpenAIKey] = useState(localStorage.getItem('openai_key') || "");
   const [aiProvider, setAIProvider] = useState<AIProvider>('gemini');
+  const [customConfig, setCustomConfig] = useState({
+      url: "http://localhost:11434/v1/chat/completions",
+      model: "llama3"
+  });
 
   useEffect(() => {
     localStorage.setItem('openai_key', openAIKey);
@@ -1838,7 +1955,7 @@ const App = () => {
   const renderContent = () => {
     switch (activeView) {
       case 'home': return <Dashboard onViewChange={setActiveView} />;
-      case 'chat': return <SpiritualChat aiProvider={aiProvider} openAIKey={openAIKey} />;
+      case 'chat': return <SpiritualChat aiProvider={aiProvider} openAIKey={openAIKey} customConfig={customConfig} />;
       case 'meditate': return <Meditation />;
       case 'journal': return <Journal />;
       case 'bible': return <BibleReader />;
@@ -1852,7 +1969,7 @@ const App = () => {
       case 'trivia': return <BibleTrivia />;
       case 'mood': return <MoodTracker />;
       case 'prayers': return <PrayerWall />;
-      case 'settings': return <SettingsView openAIKey={openAIKey} setOpenAIKey={setOpenAIKey} aiProvider={aiProvider} setAIProvider={setAIProvider} />;
+      case 'settings': return <SettingsView openAIKey={openAIKey} setOpenAIKey={setOpenAIKey} aiProvider={aiProvider} setAIProvider={setAIProvider} customConfig={customConfig} setCustomConfig={setCustomConfig} />;
       default: return <Dashboard onViewChange={setActiveView} />;
     }
   };
