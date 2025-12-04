@@ -14,6 +14,7 @@ import {
   Sun,
   PenTool,
   ChevronRight,
+  ChevronLeft,
   Globe,
   Loader2,
   Quote,
@@ -44,7 +45,8 @@ import {
   Activity,
   Users,
   Trophy,
-  WifiOff
+  WifiOff,
+  Plus
 } from 'lucide-react';
 import { GoogleGenAI } from "@google/genai";
 import { initializeApp } from "firebase/app";
@@ -69,28 +71,33 @@ const googleProvider = new GoogleAuthProvider();
 
 // OpenAI Helper
 const callOpenAI = async (apiKey: string, prompt: string, systemPrompt: string) => {
-    const response = await fetch("https://api.openai.com/v1/chat/completions", {
-        method: "POST",
-        headers: {
-            "Content-Type": "application/json",
-            "Authorization": `Bearer ${apiKey}`
-        },
-        body: JSON.stringify({
-            model: "gpt-3.5-turbo", // Or gpt-4 if available
-            messages: [
-                { role: "system", content: systemPrompt },
-                { role: "user", content: prompt }
-            ],
-            temperature: 0.7
-        })
-    });
-    
-    if (!response.ok) {
-        throw new Error("OpenAI API Failed");
+    try {
+        const response = await fetch("https://api.openai.com/v1/chat/completions", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                "Authorization": `Bearer ${apiKey}`
+            },
+            body: JSON.stringify({
+                model: "gpt-3.5-turbo",
+                messages: [
+                    { role: "system", content: systemPrompt },
+                    { role: "user", content: prompt }
+                ],
+                temperature: 0.7
+            })
+        });
+        
+        if (!response.ok) {
+            throw new Error("OpenAI API Failed");
+        }
+        
+        const data = await response.json();
+        return data.choices[0].message.content;
+    } catch (error) {
+        console.error("OpenAI Error:", error);
+        return "I am having trouble connecting to OpenAI. Please check your API Key in Settings.";
     }
-    
-    const data = await response.json();
-    return data.choices[0].message.content;
 };
 
 // Offline/Free AI Logic (Rule-based Fallback)
@@ -101,6 +108,7 @@ const generateOfflineResponse = (input: string) => {
     if (lower.includes('love')) return "Love is patient, love is kind. It does not envy, it does not boast, it is not proud. (1 Corinthians 13:4)";
     if (lower.includes('thank')) return "Give thanks in all circumstances; for this is God's will for you in Christ Jesus. (1 Thessalonians 5:18)";
     if (lower.includes('dream')) return "Dreams can be messages. Pray for wisdom to understand what your spirit is saying.";
+    if (lower.includes('suicide') || lower.includes('kill') || lower.includes('die')) return "You are precious in God's eyes. Please reach out to a friend, pastor, or local helpline immediately. You have a purpose.";
     return "I am currently in offline mode, but remember: Faith is the assurance of things hoped for, the conviction of things not seen. How else can I help locally?";
 };
 
@@ -138,6 +146,17 @@ type CalendarEvent = {
 };
 
 type AIProvider = 'gemini' | 'openai' | 'offline';
+
+// --- Constants ---
+const BIBLE_BOOKS = [
+    "Genesis", "Exodus", "Leviticus", "Numbers", "Deuteronomy", "Joshua", "Judges", "Ruth", "1 Samuel", "2 Samuel", 
+    "1 Kings", "2 Kings", "1 Chronicles", "2 Chronicles", "Ezra", "Nehemiah", "Esther", "Job", "Psalms", "Proverbs", 
+    "Ecclesiastes", "Song of Solomon", "Isaiah", "Jeremiah", "Lamentations", "Ezekiel", "Daniel", "Hosea", "Joel", 
+    "Amos", "Obadiah", "Jonah", "Micah", "Nahum", "Habakkuk", "Zephaniah", "Haggai", "Zechariah", "Malachi",
+    "Matthew", "Mark", "Luke", "John", "Acts", "Romans", "1 Corinthians", "2 Corinthians", "Galatians", "Ephesians", 
+    "Philippians", "Colossians", "1 Thessalonians", "2 Thessalonians", "1 Timothy", "2 Timothy", "Titus", "Philemon", 
+    "Hebrews", "James", "1 Peter", "2 Peter", "1 John", "2 John", "3 John", "Jude", "Revelation"
+];
 
 // --- Components ---
 
@@ -288,7 +307,7 @@ const SpiritualChat = ({ aiProvider, openAIKey }: { aiProvider: AIProvider, open
       }
     } catch (err) {
       console.error(err);
-      responseText = "I am having trouble connecting. Checking spiritual frequencies... (Please check internet or API Key)";
+      responseText = "I am having trouble connecting. Checking spiritual frequencies... (Please check internet or API Key in Settings)";
     } finally {
       const modelMsg: Message = {
         id: (Date.now() + 1).toString(),
@@ -694,29 +713,34 @@ const Journal = () => {
   );
 };
 
-// 5. Bible Reader (AI Powered & Search)
+// 5. Bible Reader (Real Bible API)
 const BibleReader = () => {
-    const [book, setBook] = useState("John");
-    const [chapter, setChapter] = useState("3");
+    const [book, setBook] = useState("Genesis");
+    const [chapter, setChapter] = useState(1);
     const [searchQuery, setSearchQuery] = useState("");
     const [content, setContent] = useState("");
     const [loading, setLoading] = useState(false);
+    const [verses, setVerses] = useState<any[]>([]);
     const [mode, setMode] = useState<'read' | 'search'>('read');
+    const [error, setError] = useState("");
 
-    const books = ["Genesis", "Exodus", "Psalms", "Proverbs", "Matthew", "Mark", "Luke", "John", "Acts", "Romans", "Revelation"];
-
+    // Use bible-api.com which is free and public
     const fetchScripture = async () => {
         setLoading(true);
+        setError("");
         setMode('read');
         try {
-            const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-            const response = await ai.models.generateContent({
-                model: 'gemini-2.5-flash',
-                contents: `Provide the full text of the Holy Bible, book of ${book}, Chapter ${chapter}. Format it nicely with verse numbers. Use KJV or NIV. Do not add commentary.`,
-            });
-            setContent(response.text || "Could not retrieve scripture.");
+            const response = await fetch(`https://bible-api.com/${book}+${chapter}`);
+            if (!response.ok) throw new Error("Chapter not found");
+            const data = await response.json();
+            
+            // Format verses
+            setVerses(data.verses);
+            setContent(data.text); 
         } catch (e) {
-            setContent("Error connecting to the Word. Check your connection.");
+            console.error(e);
+            setError("Could not retrieve scripture. Please check your internet or try another chapter.");
+            setVerses([]);
         } finally {
             setLoading(false);
         }
@@ -726,15 +750,19 @@ const BibleReader = () => {
         if (!searchQuery.trim()) return;
         setLoading(true);
         setMode('search');
+        setVerses([]);
         try {
+             // Fallback to AI for topical search as API is verse-lookup based
             const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
             const response = await ai.models.generateContent({
                 model: 'gemini-2.5-flash',
-                contents: `Find 5-7 bible verses related to the topic or keyword: "${searchQuery}". List them with Book Chapter:Verse and the text. Provide a brief encouraging thought at the end.`,
+                contents: `Find 5-7 bible verses related to the topic: "${searchQuery}". Return them as a JSON list with 'reference' and 'text' fields.`,
             });
-            setContent(response.text || "No verses found.");
+            // Simplified parsing for demo
+            const text = response.text;
+            setContent(text || "No results found.");
         } catch (e) {
-            setContent("Error searching scriptures.");
+            setContent("Error searching scriptures via AI. Try reading a specific book instead.");
         } finally {
             setLoading(false);
         }
@@ -744,32 +772,37 @@ const BibleReader = () => {
         if (mode === 'read') fetchScripture();
     }, [book, chapter]);
 
+    const changeChapter = (delta: number) => {
+        const next = Math.max(1, parseInt(chapter.toString()) + delta);
+        setChapter(next);
+    };
+
     return (
         <div className="h-full flex flex-col bg-white rounded-2xl shadow-sm border border-spiritual-100 overflow-hidden">
             <div className="p-4 bg-spiritual-50 border-b border-spiritual-100 flex flex-wrap gap-4 items-center justify-between">
-                 <div className="flex flex-col md:flex-row gap-4 w-full md:w-auto">
+                 <div className="flex flex-col md:flex-row gap-4 w-full md:w-auto items-center">
                     {/* Reader Controls */}
-                    <div className="flex items-center gap-2 bg-white px-3 py-2 rounded-lg border border-spiritual-200 shadow-sm">
+                    <div className="flex items-center gap-2 bg-white px-3 py-2 rounded-lg border border-spiritual-200 shadow-sm flex-wrap justify-center">
                         <BookOpen className="w-4 h-4 text-spiritual-500" />
                         <select 
                             value={book} 
-                            onChange={(e) => setBook(e.target.value)}
-                            className="bg-transparent font-serif font-bold text-spiritual-800 outline-none cursor-pointer"
+                            onChange={(e) => { setBook(e.target.value); setChapter(1); }}
+                            className="bg-transparent font-serif font-bold text-spiritual-800 outline-none cursor-pointer max-w-[150px]"
                         >
-                            {books.map(b => <option key={b} value={b}>{b}</option>)}
-                            <option value="custom">More...</option>
+                            {BIBLE_BOOKS.map(b => <option key={b} value={b}>{b}</option>)}
                         </select>
                         <span className="text-gray-300">|</span>
-                        <input 
-                            type="number" 
-                            value={chapter} 
-                            onChange={(e) => setChapter(e.target.value)}
-                            className="w-12 bg-transparent font-bold text-spiritual-800 outline-none"
-                            min="1"
-                        />
-                         <button onClick={fetchScripture} className="text-spiritual-600 hover:text-spiritual-800">
-                             <ChevronRight className="w-4 h-4"/>
-                         </button>
+                        <div className="flex items-center gap-1">
+                            <button onClick={() => changeChapter(-1)} className="p-1 hover:bg-gray-100 rounded"><ChevronLeft className="w-4 h-4"/></button>
+                            <input 
+                                type="number" 
+                                value={chapter} 
+                                onChange={(e) => setChapter(parseInt(e.target.value) || 1)}
+                                className="w-12 bg-transparent font-bold text-center text-spiritual-800 outline-none"
+                                min="1"
+                            />
+                            <button onClick={() => changeChapter(1)} className="p-1 hover:bg-gray-100 rounded"><ChevronRight className="w-4 h-4"/></button>
+                        </div>
                     </div>
 
                     {/* Search Controls */}
@@ -777,7 +810,7 @@ const BibleReader = () => {
                          <Search className="w-4 h-4 text-gray-400" />
                          <input 
                             type="text" 
-                            placeholder="Search keywords, topics..." 
+                            placeholder="Topic search (AI)" 
                             value={searchQuery}
                             onChange={(e) => setSearchQuery(e.target.value)}
                             onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
@@ -791,22 +824,47 @@ const BibleReader = () => {
                  <h2 className="hidden lg:block font-serif text-xl italic text-spiritual-400">The Living Word</h2>
             </div>
             
-            <div className="flex-1 overflow-y-auto p-8 bg-white">
+            <div className="flex-1 overflow-y-auto p-6 md:p-12 bg-white scroll-smooth">
                 {loading ? (
                     <div className="h-full flex flex-col items-center justify-center text-spiritual-300">
                         <Loader2 className="w-12 h-12 animate-spin mb-4" />
-                        <p className="font-serif italic">Seeking wisdom...</p>
+                        <p className="font-serif italic">Opening scripture...</p>
+                    </div>
+                ) : error ? (
+                    <div className="h-full flex flex-col items-center justify-center text-red-400 text-center">
+                        <p className="mb-4">{error}</p>
+                        <button onClick={fetchScripture} className="text-sm bg-red-50 text-red-600 px-4 py-2 rounded-full">Retry</button>
                     </div>
                 ) : (
                     <div className="max-w-3xl mx-auto prose prose-spiritual prose-lg">
                         {mode === 'read' ? (
-                             <h3 className="text-center font-serif text-3xl text-spiritual-900 mb-8">{book} {chapter}</h3>
+                            <>
+                                <h3 className="text-center font-serif text-4xl text-spiritual-900 mb-8 border-b pb-4 border-spiritual-100">
+                                    {book} <span className="text-spiritual-500">{chapter}</span>
+                                </h3>
+                                <div className="space-y-4 font-serif text-gray-700 leading-loose text-lg">
+                                    {verses.map((v) => (
+                                        <div key={v.verse} className="relative pl-2 hover:bg-yellow-50/50 transition-colors rounded">
+                                            <span className="absolute -left-6 text-xs text-spiritual-300 font-sans mt-2 w-4 text-right select-none">{v.verse}</span>
+                                            <p>{v.text}</p>
+                                        </div>
+                                    ))}
+                                </div>
+                                <div className="mt-12 flex justify-between border-t border-spiritual-100 pt-8">
+                                    <button onClick={() => changeChapter(-1)} className="flex items-center gap-2 text-spiritual-600 hover:text-spiritual-800">
+                                        <ChevronLeft className="w-4 h-4"/> Previous Chapter
+                                    </button>
+                                    <button onClick={() => changeChapter(1)} className="flex items-center gap-2 text-spiritual-600 hover:text-spiritual-800">
+                                        Next Chapter <ChevronRight className="w-4 h-4"/>
+                                    </button>
+                                </div>
+                            </>
                         ) : (
-                             <h3 className="text-center font-serif text-2xl text-spiritual-900 mb-8">Results for "{searchQuery}"</h3>
+                             <div className="whitespace-pre-wrap leading-loose font-serif text-gray-700">
+                                <h3 className="text-center font-serif text-2xl text-spiritual-900 mb-8">Results for "{searchQuery}"</h3>
+                                {content}
+                            </div>
                         )}
-                        <div className="whitespace-pre-wrap leading-loose font-serif text-gray-700">
-                            {content}
-                        </div>
                     </div>
                 )}
             </div>
@@ -949,6 +1007,15 @@ const EventCalendar = () => {
         { id: '3', title: "Community Charity Drive", date: '2023-11-04', time: '10:00 AM', location: "City Center", type: 'in-person' },
         { id: '4', title: "Worship Night", date: '2023-11-05', time: '07:00 PM', location: "Main Chapel", type: 'in-person' },
     ]);
+    const [showAdd, setShowAdd] = useState(false);
+    const [newEvent, setNewEvent] = useState({ title: '', date: '', time: '', location: '', type: 'in-person' });
+
+    const addEvent = () => {
+        if(!newEvent.title || !newEvent.date) return;
+        setEvents([...events, { ...newEvent, id: Date.now().toString(), type: newEvent.type as any }]);
+        setShowAdd(false);
+        setNewEvent({ title: '', date: '', time: '', location: '', type: 'in-person' });
+    };
 
     return (
         <div className="h-full bg-white rounded-2xl shadow-sm border border-spiritual-100 p-6 flex flex-col">
@@ -957,10 +1024,25 @@ const EventCalendar = () => {
                     <h2 className="font-serif text-3xl text-spiritual-800 font-bold">Community Calendar</h2>
                     <p className="text-gray-500">Connect with others in faith and service.</p>
                 </div>
-                <button className="bg-spiritual-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-spiritual-700">
-                    + Suggest Event
+                <button onClick={() => setShowAdd(!showAdd)} className="bg-spiritual-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-spiritual-700 flex items-center gap-2">
+                    <Plus className="w-4 h-4"/> Add Event
                 </button>
             </div>
+
+            {showAdd && (
+                <div className="mb-6 p-4 bg-spiritual-50 rounded-xl border border-spiritual-100 grid gap-3 animate-in fade-in slide-in-from-top-2">
+                    <input className="p-2 rounded border" placeholder="Event Title" value={newEvent.title} onChange={e => setNewEvent({...newEvent, title: e.target.value})}/>
+                    <div className="flex gap-2">
+                        <input type="date" className="p-2 rounded border flex-1" value={newEvent.date} onChange={e => setNewEvent({...newEvent, date: e.target.value})}/>
+                        <input type="time" className="p-2 rounded border flex-1" value={newEvent.time} onChange={e => setNewEvent({...newEvent, time: e.target.value})}/>
+                    </div>
+                    <input className="p-2 rounded border" placeholder="Location" value={newEvent.location} onChange={e => setNewEvent({...newEvent, location: e.target.value})}/>
+                    <div className="flex justify-end gap-2">
+                        <button onClick={() => setShowAdd(false)} className="text-gray-500 hover:text-gray-700">Cancel</button>
+                        <button onClick={addEvent} className="bg-spiritual-600 text-white px-4 py-2 rounded hover:bg-spiritual-700">Save Event</button>
+                    </div>
+                </div>
+            )}
 
             <div className="flex-1 overflow-y-auto">
                  <div className="space-y-4">
