@@ -1,0 +1,7 @@
+{
+  "name": "Spiritual Welfare",
+  "description": "A comprehensive spiritual wellness platform featuring AI guidance, meditation tools, and daily wisdom. Created by Akin S. Sokpah.",
+  "requestFramePermissions": [
+    "microphone"
+  ]
+}
