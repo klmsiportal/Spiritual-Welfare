@@ -117,8 +117,13 @@ const AMBIENT_TRACKS = [
     { id: 'video4', title: 'Alone With God', type: 'video', url: '1s58rW0_LN4' },
     { id: 'video5', title: 'Secret Place', type: 'video', url: 'j4mR1v_r2F4' },
     { id: 'video6', title: 'Deep Prayer Music', type: 'video', url: 's7j6e1g5d8w' },
+    { id: 'video7', title: 'Hillsong Instrumental', type: 'video', url: 'F8T5u6XzZ-U' },
+    { id: 'video8', title: 'Prophetic Intercession', type: 'video', url: 'bX1L8_Wl7hM' },
+    { id: 'video9', title: 'Peaceful Scriptures', type: 'video', url: '1s58rW0_LN4' },
     { id: 'rain', title: 'Soft Rain Audio', url: 'https://cdn.pixabay.com/download/audio/2022/05/27/audio_1808fbf07a.mp3' },
+    { id: 'rain2', title: 'Thunder & Rain', url: 'https://cdn.pixabay.com/download/audio/2022/07/04/audio_9075775960.mp3' },
     { id: 'pads', title: 'Worship Pads Audio', url: 'https://cdn.pixabay.com/download/audio/2024/02/07/audio_c3e031a54f.mp3' },
+    { id: 'pads2', title: 'Deep Ambient Pad', url: 'https://cdn.pixabay.com/download/audio/2023/09/06/audio_2d82d44445.mp3' },
 ];
 
 // --- Components ---
@@ -132,7 +137,7 @@ const Sidebar = ({ activeView, onViewChange, mobileOpen, setMobileOpen, user, on
     { id: 'tv', label: 'Gospel TV Live', icon: <Tv className="w-5 h-5" /> },
     { id: 'cinema', label: 'Spiritual Cinema', icon: <Film className="w-5 h-5" /> },
     { id: 'community', label: 'Community Chat', icon: <Users className="w-5 h-5" /> },
-    { id: 'topics', label: 'Scripture Guide', icon: <List className="w-5 h-5" /> }, // Replaced AI Chat
+    { id: 'topics', label: 'Scripture Guide', icon: <List className="w-5 h-5" /> }, 
     { id: 'mysteries', label: 'Mysteries & Prophecy', icon: <Eye className="w-5 h-5" /> },
     { id: 'meditate', label: 'Meditation', icon: <Wind className="w-5 h-5" /> },
     { id: 'journal', label: 'My Journal', icon: <PenTool className="w-5 h-5" /> },
@@ -169,14 +174,14 @@ const Sidebar = ({ activeView, onViewChange, mobileOpen, setMobileOpen, user, on
                     <Volume2 className="w-4 h-4" />
                     <span className="text-xs font-bold uppercase tracking-wide">Ambient Music</span>
                 </div>
-                <div className="space-y-1 h-24 overflow-y-auto scrollbar-hide">
+                <div className="space-y-1 h-32 overflow-y-auto scrollbar-hide">
                     {AMBIENT_TRACKS.map(t => (
                         <button 
                             key={t.id}
                             onClick={() => onPlayAmbient(t)}
                             className="w-full text-[10px] bg-white border border-spiritual-200 rounded px-2 py-1 text-gray-600 hover:bg-spiritual-100 hover:text-spiritual-700 truncate text-left transition-colors flex items-center gap-2"
                         >
-                            {t.type === 'video' ? <Tv className="w-3 h-3"/> : <Music className="w-3 h-3"/>}
+                            {t.type === 'video' ? <Tv className="w-3 h-3 text-red-400"/> : <Music className="w-3 h-3 text-blue-400"/>}
                             {t.title}
                         </button>
                     ))}
@@ -324,11 +329,11 @@ const CommunityChat = ({ user }: { user: FirebaseUser }) => {
     const dummyRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
-        // Subscribe to Firestore messages
+        // Subscribe to Firestore messages with increased limit for history
         const q = query(
             collection(db, "chat_messages"), 
             orderBy("createdAt", "desc"), 
-            limit(50)
+            limit(500) // Increased limit to show more history
         );
         
         const unsubscribe = onSnapshot(q, (snapshot) => {
@@ -336,6 +341,7 @@ const CommunityChat = ({ user }: { user: FirebaseUser }) => {
             snapshot.forEach((doc) => {
                 msgs.push({ id: doc.id, ...doc.data() } as ChatMessage);
             });
+            // Firestore returns newest first (desc), so reverse for chat view (oldest at top)
             setMessages(msgs.reverse());
         }, (error) => {
             console.error("Chat Error:", error);
@@ -345,6 +351,7 @@ const CommunityChat = ({ user }: { user: FirebaseUser }) => {
     }, []);
 
     useEffect(() => {
+        // Scroll to bottom when new messages arrive
         dummyRef.current?.scrollIntoView({ behavior: 'smooth' });
     }, [messages]);
 
@@ -363,8 +370,14 @@ const CommunityChat = ({ user }: { user: FirebaseUser }) => {
             setNewMessage("");
         } catch (error) {
             console.error("Error sending message", error);
-            alert("Could not send message. Please try again later.");
+            alert("Could not send message. Check your connection.");
         }
+    };
+
+    const formatTime = (timestamp: any) => {
+        if (!timestamp) return '';
+        if (timestamp.toDate) return timestamp.toDate().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+        return '';
     };
 
     return (
@@ -375,11 +388,17 @@ const CommunityChat = ({ user }: { user: FirebaseUser }) => {
                 </h2>
                 <div className="flex items-center gap-2 text-xs text-green-600">
                     <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse"/>
-                    Online
+                    Live Chat
                 </div>
             </div>
             
             <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-gray-50/50">
+                {messages.length === 0 && (
+                    <div className="text-center text-gray-400 py-10">
+                        <MessageCircle className="w-12 h-12 mx-auto mb-2 opacity-20"/>
+                        <p>Welcome! Be the first to share a blessing.</p>
+                    </div>
+                )}
                 {messages.map((msg) => {
                     const isMe = msg.userId === user.uid;
                     return (
@@ -389,7 +408,7 @@ const CommunityChat = ({ user }: { user: FirebaseUser }) => {
                                     <img src={msg.photoURL} className="w-8 h-8 rounded-full border border-gray-200" alt="Av"/>
                                 ) : (
                                     <div className="w-8 h-8 rounded-full bg-spiritual-200 flex items-center justify-center text-spiritual-700 text-xs font-bold">
-                                        {msg.displayName?.[0]}
+                                        {msg.displayName?.[0] || 'A'}
                                     </div>
                                 )}
                             </div>
@@ -398,6 +417,9 @@ const CommunityChat = ({ user }: { user: FirebaseUser }) => {
                             `}>
                                 {!isMe && <p className="text-[10px] font-bold text-spiritual-500 mb-1">{msg.displayName}</p>}
                                 <p>{msg.text}</p>
+                                <p className={`text-[9px] mt-1 text-right opacity-70 ${isMe ? 'text-spiritual-100' : 'text-gray-400'}`}>
+                                    {formatTime(msg.createdAt)}
+                                </p>
                             </div>
                         </div>
                     );
