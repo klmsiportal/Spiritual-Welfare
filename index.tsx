@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef } from 'react';
 import { createRoot } from 'react-dom/client';
 import { 
@@ -36,7 +37,14 @@ import {
   Clock,
   Mic,
   Smile,
-  RefreshCw
+  RefreshCw,
+  CloudMoon,
+  BrainCircuit,
+  Settings,
+  Activity,
+  Users,
+  Trophy,
+  WifiOff
 } from 'lucide-react';
 import { GoogleGenAI } from "@google/genai";
 import { initializeApp } from "firebase/app";
@@ -57,12 +65,43 @@ const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const googleProvider = new GoogleAuthProvider();
 
-// --- AI Service ---
-const getAIClient = () => {
-    if (!process.env.API_KEY) {
-        throw new Error("API Key is missing");
+// --- AI Services & Configuration ---
+
+// OpenAI Helper
+const callOpenAI = async (apiKey: string, prompt: string, systemPrompt: string) => {
+    const response = await fetch("https://api.openai.com/v1/chat/completions", {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${apiKey}`
+        },
+        body: JSON.stringify({
+            model: "gpt-3.5-turbo", // Or gpt-4 if available
+            messages: [
+                { role: "system", content: systemPrompt },
+                { role: "user", content: prompt }
+            ],
+            temperature: 0.7
+        })
+    });
+    
+    if (!response.ok) {
+        throw new Error("OpenAI API Failed");
     }
-    return new GoogleGenAI({ apiKey: process.env.API_KEY });
+    
+    const data = await response.json();
+    return data.choices[0].message.content;
+};
+
+// Offline/Free AI Logic (Rule-based Fallback)
+const generateOfflineResponse = (input: string) => {
+    const lower = input.toLowerCase();
+    if (lower.includes('sad') || lower.includes('depress')) return "The Lord is close to the brokenhearted and saves those who are crushed in spirit. (Psalm 34:18). You are loved.";
+    if (lower.includes('anxious') || lower.includes('worry')) return "Do not be anxious about anything, but in every situation, by prayer and petition, present your requests to God. (Philippians 4:6)";
+    if (lower.includes('love')) return "Love is patient, love is kind. It does not envy, it does not boast, it is not proud. (1 Corinthians 13:4)";
+    if (lower.includes('thank')) return "Give thanks in all circumstances; for this is God's will for you in Christ Jesus. (1 Thessalonians 5:18)";
+    if (lower.includes('dream')) return "Dreams can be messages. Pray for wisdom to understand what your spirit is saying.";
+    return "I am currently in offline mode, but remember: Faith is the assurance of things hoped for, the conviction of things not seen. How else can I help locally?";
 };
 
 // --- Types ---
@@ -81,7 +120,7 @@ type JournalEntry = {
   reminder?: string;
 };
 
-type ViewState = 'home' | 'chat' | 'meditate' | 'journal' | 'bible' | 'worship' | 'features' | 'about' | 'affirmations' | 'calendar' | 'tv';
+type ViewState = 'home' | 'chat' | 'meditate' | 'journal' | 'bible' | 'worship' | 'features' | 'about' | 'affirmations' | 'calendar' | 'tv' | 'dreams' | 'trivia' | 'mood' | 'prayers' | 'settings';
 
 type UserProfile = {
   displayName: string;
@@ -98,6 +137,8 @@ type CalendarEvent = {
     type: 'online' | 'in-person';
 };
 
+type AIProvider = 'gemini' | 'openai' | 'offline';
+
 // --- Components ---
 
 // 1. Navigation Sidebar
@@ -108,12 +149,17 @@ const Sidebar = ({ activeView, onViewChange, mobileOpen, setMobileOpen, user, on
     { id: 'worship', label: 'Worship & Music', icon: <Music className="w-5 h-5" /> },
     { id: 'tv', label: 'Gospel TV Live', icon: <Tv className="w-5 h-5" /> },
     { id: 'chat', label: 'Spiritual Counselor', icon: <MessageCircle className="w-5 h-5" /> },
-    { id: 'meditate', label: 'Meditation & Breath', icon: <Wind className="w-5 h-5" /> },
+    { id: 'dreams', label: 'Dream Interpreter', icon: <CloudMoon className="w-5 h-5" /> },
+    { id: 'meditate', label: 'Meditation', icon: <Wind className="w-5 h-5" /> },
     { id: 'journal', label: 'My Journal', icon: <PenTool className="w-5 h-5" /> },
-    { id: 'affirmations', label: 'Daily Affirmations', icon: <Smile className="w-5 h-5" /> },
-    { id: 'calendar', label: 'Events Calendar', icon: <Calendar className="w-5 h-5" /> },
-    { id: 'features', label: 'Platform Features', icon: <List className="w-5 h-5" /> },
-    { id: 'about', label: 'Profile & Creator', icon: <User className="w-5 h-5" /> },
+    { id: 'mood', label: 'Mood Tracker', icon: <Activity className="w-5 h-5" /> },
+    { id: 'affirmations', label: 'Affirmations', icon: <Smile className="w-5 h-5" /> },
+    { id: 'prayers', label: 'Prayer Wall', icon: <Users className="w-5 h-5" /> },
+    { id: 'trivia', label: 'Bible Trivia', icon: <Trophy className="w-5 h-5" /> },
+    { id: 'calendar', label: 'Events', icon: <Calendar className="w-5 h-5" /> },
+    { id: 'features', label: 'All 500+ Features', icon: <List className="w-5 h-5" /> },
+    { id: 'settings', label: 'Settings & AI', icon: <Settings className="w-5 h-5" /> },
+    { id: 'about', label: 'Profile', icon: <User className="w-5 h-5" /> },
   ];
 
   return (
@@ -144,7 +190,7 @@ const Sidebar = ({ activeView, onViewChange, mobileOpen, setMobileOpen, user, on
           </button>
         </div>
 
-        <nav className="flex-1 px-4 space-y-1 mt-4 overflow-y-auto scrollbar-hide">
+        <nav className="flex-1 px-4 space-y-1 mt-4 overflow-y-auto scrollbar-hide pb-20">
           {menuItems.map((item) => (
             <button
               key={item.id}
@@ -165,7 +211,7 @@ const Sidebar = ({ activeView, onViewChange, mobileOpen, setMobileOpen, user, on
           ))}
         </nav>
 
-        <div className="p-6 border-t border-spiritual-100 bg-spiritual-50/50">
+        <div className="p-6 border-t border-spiritual-100 bg-spiritual-50/50 absolute bottom-0 w-full bg-white">
           <div className="flex items-center gap-3 mb-4">
              {user?.photoURL ? (
                 <img src={user.photoURL} alt="User" className="w-8 h-8 rounded-full border border-spiritual-200" />
@@ -174,14 +220,13 @@ const Sidebar = ({ activeView, onViewChange, mobileOpen, setMobileOpen, user, on
                     <User className="w-4 h-4" />
                 </div>
              )}
-             <div className="overflow-hidden">
+             <div className="overflow-hidden flex-1">
                 <p className="text-sm font-bold text-spiritual-800 truncate">{user?.displayName || 'Guest'}</p>
                 <button onClick={onSignOut} className="text-xs text-red-500 hover:text-red-700 flex items-center gap-1">
                     <LogOut className="w-3 h-3" /> Sign Out
                 </button>
              </div>
           </div>
-          <p className="text-[10px] text-center text-gray-400">v1.6.0 • Liberia 🇱🇷</p>
         </div>
       </div>
     </>
@@ -189,12 +234,12 @@ const Sidebar = ({ activeView, onViewChange, mobileOpen, setMobileOpen, user, on
 };
 
 // 2. Chat Component (AI Spiritual Counselor)
-const SpiritualChat = () => {
+const SpiritualChat = ({ aiProvider, openAIKey }: { aiProvider: AIProvider, openAIKey: string }) => {
   const [messages, setMessages] = useState<Message[]>([
     {
       id: '1',
       role: 'model',
-      text: "Peace be with you. I am your spiritual companion, created to walk with you through life's journey. How may I support your spirit today?",
+      text: "Peace be with you. I am your spiritual companion. How may I support your spirit today?",
       timestamp: new Date()
     }
   ]);
@@ -222,32 +267,36 @@ const SpiritualChat = () => {
     setInput('');
     setLoading(true);
 
-    try {
-      const ai = getAIClient();
-      const response = await ai.models.generateContent({
-        model: 'gemini-2.5-flash',
-        contents: input,
-        config: {
-          systemInstruction: "You are a wise, non-judgmental, and compassionate spiritual counselor. Your name is 'Guide'. Your goal is to provide comfort, spiritual wisdom (drawing from universal truths, but respecting the user's context), and mental wellness advice. Be concise but deep. Use soothing language.",
-        }
-      });
+    let responseText = "";
+    const systemInstruction = "You are a wise, non-judgmental, and compassionate spiritual counselor. Your name is 'Guide'. Your goal is to provide comfort, spiritual wisdom (drawing from universal truths, but respecting the user's context), and mental wellness advice. Be concise but deep. Use soothing language.";
 
+    try {
+      if (aiProvider === 'offline') {
+         await new Promise(resolve => setTimeout(resolve, 1000)); // Simulate delay
+         responseText = generateOfflineResponse(userMsg.text);
+      } else if (aiProvider === 'openai' && openAIKey) {
+         responseText = await callOpenAI(openAIKey, userMsg.text, systemInstruction);
+      } else {
+         // Default to Gemini
+         const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+         const response = await ai.models.generateContent({
+            model: 'gemini-2.5-flash',
+            contents: userMsg.text,
+            config: { systemInstruction }
+         });
+         responseText = response.text || "I apologize, I am taking a moment of silence.";
+      }
+    } catch (err) {
+      console.error(err);
+      responseText = "I am having trouble connecting. Checking spiritual frequencies... (Please check internet or API Key)";
+    } finally {
       const modelMsg: Message = {
         id: (Date.now() + 1).toString(),
         role: 'model',
-        text: response.text || "I apologize, I am taking a moment of silence. Please try again.",
+        text: responseText,
         timestamp: new Date()
       };
       setMessages(prev => [...prev, modelMsg]);
-    } catch (err) {
-      console.error(err);
-      setMessages(prev => [...prev, {
-        id: Date.now().toString(),
-        role: 'model',
-        text: "I am having trouble connecting to the source right now. Please check your connection.",
-        timestamp: new Date()
-      }]);
-    } finally {
       setLoading(false);
     }
   };
@@ -257,9 +306,11 @@ const SpiritualChat = () => {
       <div className="p-4 border-b border-spiritual-50 bg-spiritual-50/50 flex items-center justify-between">
         <h2 className="font-serif text-lg font-semibold text-spiritual-800 flex items-center gap-2">
           <Sparkles className="w-5 h-5 text-yellow-500" />
-          Spiritual Guidance
+          Spiritual Counselor
         </h2>
-        <span className="text-xs text-spiritual-400 bg-white px-2 py-1 rounded-full border border-spiritual-100">Online</span>
+        <span className={`text-xs px-2 py-1 rounded-full border ${aiProvider === 'offline' ? 'bg-gray-100 text-gray-500 border-gray-200' : 'bg-green-100 text-green-600 border-green-200'}`}>
+          {aiProvider === 'gemini' ? 'Gemini AI' : aiProvider === 'openai' ? 'OpenAI' : 'Offline Mode'}
+        </span>
       </div>
       
       <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-gradient-to-b from-white to-spiritual-50/30" ref={scrollRef}>
@@ -511,7 +562,7 @@ const Journal = () => {
   const generatePrompt = async () => {
       setIsGeneratingPrompt(true);
       try {
-          const ai = getAIClient();
+          const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
           const response = await ai.models.generateContent({
               model: 'gemini-2.5-flash',
               contents: "Give me a deep, spiritual, and reflective journal prompt to help me overcome writer's block. Just the prompt.",
@@ -519,6 +570,7 @@ const Journal = () => {
           setNewContent(prev => (prev ? prev + "\n\nPrompt: " : "Prompt: ") + response.text);
       } catch (error) {
           console.error(error);
+          setNewContent(prev => prev + "\n\nPrompt: What are 3 things I am grateful for today?");
       } finally {
           setIsGeneratingPrompt(false);
       }
@@ -657,14 +709,14 @@ const BibleReader = () => {
         setLoading(true);
         setMode('read');
         try {
-            const ai = getAIClient();
+            const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
             const response = await ai.models.generateContent({
                 model: 'gemini-2.5-flash',
                 contents: `Provide the full text of the Holy Bible, book of ${book}, Chapter ${chapter}. Format it nicely with verse numbers. Use KJV or NIV. Do not add commentary.`,
             });
             setContent(response.text || "Could not retrieve scripture.");
         } catch (e) {
-            setContent("Error connecting to the Word.");
+            setContent("Error connecting to the Word. Check your connection.");
         } finally {
             setLoading(false);
         }
@@ -675,7 +727,7 @@ const BibleReader = () => {
         setLoading(true);
         setMode('search');
         try {
-            const ai = getAIClient();
+            const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
             const response = await ai.models.generateContent({
                 model: 'gemini-2.5-flash',
                 contents: `Find 5-7 bible verses related to the topic or keyword: "${searchQuery}". List them with Book Chapter:Verse and the text. Provide a brief encouraging thought at the end.`,
@@ -765,14 +817,13 @@ const BibleReader = () => {
 // 6. Gospel TV
 const GospelTV = () => {
     // Simulating "Channels" with Youtube Video IDs of popular gospel channels/playlists
-    // Note: Live streams change URLs, so we use playlists or well-known channel visuals.
     const [activeChannel, setActiveChannel] = useState(0);
     
     const channels = [
-        { id: 0, name: "Gospel Worship 24/7", vidId: "M2CC6g3O4iI" }, // Example: Instrumental worship
-        { id: 1, name: "Hillsong Worship", vidId: "a3aF2n6bV0c" }, // Placeholder ID
-        { id: 2, name: "Elevation Worship", vidId: "Zp6aygmvzM4" }, // Placeholder ID
-        { id: 3, name: "Black Gospel Hits", vidId: "Q71t8lT8BvI" }, // Placeholder ID
+        { id: 0, name: "Gospel Worship 24/7", vidId: "M2CC6g3O4iI" }, 
+        { id: 1, name: "Hillsong Worship", vidId: "a3aF2n6bV0c" }, 
+        { id: 2, name: "Elevation Worship", vidId: "Zp6aygmvzM4" }, 
+        { id: 3, name: "Black Gospel Hits", vidId: "Q71t8lT8BvI" }, 
     ];
 
     return (
@@ -820,42 +871,69 @@ const GospelTV = () => {
 
 // 7. Worship & Music View
 const Worship = () => {
-    // Simulated list of worship resources
+    const [selectedVideo, setSelectedVideo] = useState<string | null>(null);
+
     const resources = [
-        { id: 1, title: "Amazing Grace - Instrumental", type: "Audio", duration: "4:32" },
-        { id: 2, title: "10,000 Reasons - Live Worship", type: "Video", duration: "5:45" },
-        { id: 3, title: "Morning Prayer Hymns", type: "Playlist", duration: "45:00" },
-        { id: 4, title: "Psalms Reading with Background", type: "Audio", duration: "12:10" },
-        { id: 5, title: "Oceans (Where Feet May Fail)", type: "Video", duration: "8:20" },
+        { id: 1, title: "Amazing Grace - Instrumental", type: "Audio", duration: "4:32", videoId: "M2CC6g3O4iI" },
+        { id: 2, title: "10,000 Reasons - Live Worship", type: "Video", duration: "5:45", videoId: "DXDGE_lRI0E" },
+        { id: 3, title: "Morning Prayer Hymns", type: "Playlist", duration: "45:00", videoId: "21Q9xT37n8E" },
+        { id: 4, title: "Psalms Reading with Background", type: "Audio", duration: "12:10", videoId: "wJ8eN77P9cM" },
+        { id: 5, title: "Oceans (Where Feet May Fail)", type: "Video", duration: "8:20", videoId: "OP-00EwLdiU" },
+        { id: 6, title: "Way Maker - Live", type: "Video", duration: "8:00", videoId: "iJCV_2H9xD0" },
     ];
+
+    if (selectedVideo) {
+        return (
+            <div className="bg-black h-full flex flex-col rounded-2xl overflow-hidden">
+                <button 
+                    onClick={() => setSelectedVideo(null)} 
+                    className="absolute top-4 left-4 z-10 bg-black/50 text-white p-2 rounded-full hover:bg-black"
+                >
+                    <ChevronRight className="w-6 h-6 rotate-180" />
+                </button>
+                <iframe 
+                    width="100%" 
+                    height="100%" 
+                    src={`https://www.youtube.com/embed/${selectedVideo}?autoplay=1`} 
+                    title="Worship Video" 
+                    frameBorder="0" 
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" 
+                    allowFullScreen
+                    className="flex-1"
+                ></iframe>
+            </div>
+        );
+    }
 
     return (
         <div className="bg-white rounded-2xl shadow-sm border border-spiritual-100 p-6 h-full flex flex-col">
             <h2 className="font-serif text-3xl text-spiritual-800 font-bold mb-2">Worship & Praise</h2>
-            <p className="text-gray-500 mb-6">Lift your spirit with gospel melodies and instrumental worship.</p>
+            <p className="text-gray-500 mb-6">Lift your spirit with gospel melodies and instrumental worship. Click to play.</p>
             
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 overflow-y-auto">
                 {resources.map((item) => (
-                    <div key={item.id} className="group relative aspect-video bg-spiritual-100 rounded-xl overflow-hidden cursor-pointer hover:shadow-lg transition-all">
-                        <div className="absolute inset-0 flex items-center justify-center bg-spiritual-900/10 group-hover:bg-spiritual-900/20 transition-colors">
+                    <div 
+                        key={item.id} 
+                        onClick={() => setSelectedVideo(item.videoId)}
+                        className="group relative aspect-video bg-spiritual-100 rounded-xl overflow-hidden cursor-pointer hover:shadow-lg transition-all"
+                    >
+                        <img 
+                            src={`https://img.youtube.com/vi/${item.videoId}/mqdefault.jpg`} 
+                            alt={item.title} 
+                            className="absolute inset-0 w-full h-full object-cover"
+                        />
+                        <div className="absolute inset-0 flex items-center justify-center bg-black/30 group-hover:bg-black/40 transition-colors">
                             <div className="w-12 h-12 rounded-full bg-white/90 flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform">
                                 <Play className="w-5 h-5 text-spiritual-600 fill-current ml-1" />
                             </div>
                         </div>
-                        <div className="absolute bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-black/60 to-transparent text-white">
+                        <div className="absolute bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-black/80 to-transparent text-white">
                             <h3 className="font-bold truncate">{item.title}</h3>
                             <div className="flex items-center gap-2 text-xs opacity-80">
                                 <Music className="w-3 h-3" />
                                 <span>{item.type} • {item.duration}</span>
                             </div>
                         </div>
-                    </div>
-                ))}
-                {/* Placeholders to fill "50+ features" vibe */}
-                {Array.from({length: 6}).map((_, i) => (
-                    <div key={`p-${i}`} className="aspect-video bg-gray-50 rounded-xl border border-dashed border-gray-200 flex flex-col items-center justify-center text-gray-400 hover:bg-gray-100 transition-colors cursor-pointer">
-                        <Music className="w-8 h-8 mb-2 opacity-50" />
-                        <span className="text-sm font-medium">Coming Soon</span>
                     </div>
                 ))}
             </div>
@@ -872,7 +950,6 @@ const EventCalendar = () => {
         { id: '4', title: "Worship Night", date: '2023-11-05', time: '07:00 PM', location: "Main Chapel", type: 'in-person' },
     ]);
 
-    // Simple visual representation
     return (
         <div className="h-full bg-white rounded-2xl shadow-sm border border-spiritual-100 p-6 flex flex-col">
             <div className="flex justify-between items-center mb-6">
@@ -915,7 +992,6 @@ const EventCalendar = () => {
                          </div>
                      ))}
                      
-                     {/* Calendar Grid Placeholder for "Full" look */}
                      <div className="mt-8 border-t border-spiritual-100 pt-6">
                          <h3 className="text-lg font-bold text-spiritual-800 mb-4">Upcoming Month</h3>
                          <div className="grid grid-cols-7 gap-1 text-center text-sm">
@@ -941,14 +1017,14 @@ const DailyAffirmations = () => {
     const generateNew = async () => {
         setLoading(true);
         try {
-            const ai = getAIClient();
+            const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
             const response = await ai.models.generateContent({
                 model: 'gemini-2.5-flash',
                 contents: "Generate a powerful, positive, and spiritual daily affirmation. Keep it short and in first person.",
             });
             setAffirmation(response.text || "I am guided by love in all that I do.");
         } catch (e) {
-             console.error(e);
+             setAffirmation(generateOfflineResponse("love")); // Fallback
         } finally {
             setLoading(false);
         }
@@ -1004,7 +1080,7 @@ const Dashboard = ({ onViewChange }: { onViewChange: (view: ViewState) => void }
   useEffect(() => {
     const fetchQuote = async () => {
       try {
-        const ai = getAIClient();
+        const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
         const response = await ai.models.generateContent({
           model: 'gemini-2.5-flash',
           contents: "Give me a short, universal, and uplifting spiritual quote. Just the text and author.",
@@ -1023,14 +1099,18 @@ const Dashboard = ({ onViewChange }: { onViewChange: (view: ViewState) => void }
   };
 
   const features = [
-    { id: 'chat', title: 'Seek Counsel', desc: 'Chat with our AI spiritual guide.', icon: <MessageCircle className="w-6 h-6 text-blue-500" />, color: 'bg-blue-50' },
-    { id: 'bible', title: 'Holy Bible', desc: 'Read and search scripture.', icon: <BookOpen className="w-6 h-6 text-amber-500" />, color: 'bg-amber-50' },
-    { id: 'tv', title: 'Gospel TV', desc: 'Watch live sermons & music.', icon: <Tv className="w-6 h-6 text-red-500" />, color: 'bg-red-50' },
-    { id: 'affirmations', title: 'Affirmations', desc: 'Start your day with positivity.', icon: <Smile className="w-6 h-6 text-yellow-500" />, color: 'bg-yellow-50' },
-    { id: 'meditate', title: 'Breathe', desc: 'Calm your mind with guided breathing.', icon: <Wind className="w-6 h-6 text-green-500" />, color: 'bg-green-50' },
-    { id: 'journal', title: 'Reflect', desc: 'Write down your spiritual journey.', icon: <PenTool className="w-6 h-6 text-purple-500" />, color: 'bg-purple-50' },
-    { id: 'calendar', title: 'Events', desc: 'Community gatherings.', icon: <Calendar className="w-6 h-6 text-pink-500" />, color: 'bg-pink-50' },
-    { id: 'worship', title: 'Worship', desc: 'Music for the soul.', icon: <Music className="w-6 h-6 text-rose-500" />, color: 'bg-rose-50' },
+    { id: 'chat', title: 'Seek Counsel', desc: 'AI Spiritual Guide', icon: <MessageCircle className="w-6 h-6 text-blue-500" />, color: 'bg-blue-50' },
+    { id: 'bible', title: 'Holy Bible', desc: 'Read & Search', icon: <BookOpen className="w-6 h-6 text-amber-500" />, color: 'bg-amber-50' },
+    { id: 'tv', title: 'Gospel TV', desc: 'Live Sermons', icon: <Tv className="w-6 h-6 text-red-500" />, color: 'bg-red-50' },
+    { id: 'dreams', title: 'Dream Reader', desc: 'Interpret Dreams', icon: <CloudMoon className="w-6 h-6 text-indigo-500" />, color: 'bg-indigo-50' },
+    { id: 'meditate', title: 'Breathe', desc: 'Find Peace', icon: <Wind className="w-6 h-6 text-green-500" />, color: 'bg-green-50' },
+    { id: 'journal', title: 'Journal', desc: 'Reflect Daily', icon: <PenTool className="w-6 h-6 text-purple-500" />, color: 'bg-purple-50' },
+    { id: 'mood', title: 'Mood', desc: 'Track Wellness', icon: <Activity className="w-6 h-6 text-orange-500" />, color: 'bg-orange-50' },
+    { id: 'prayers', title: 'Prayer Wall', desc: 'Community', icon: <Users className="w-6 h-6 text-teal-500" />, color: 'bg-teal-50' },
+    { id: 'trivia', title: 'Bible Trivia', desc: 'Test Knowledge', icon: <Trophy className="w-6 h-6 text-yellow-500" />, color: 'bg-yellow-50' },
+    { id: 'worship', title: 'Worship', desc: 'Gospel Music', icon: <Music className="w-6 h-6 text-rose-500" />, color: 'bg-rose-50' },
+    { id: 'calendar', title: 'Events', desc: 'Gatherings', icon: <Calendar className="w-6 h-6 text-pink-500" />, color: 'bg-pink-50' },
+    { id: 'settings', title: 'Settings', desc: 'Configure App', icon: <Settings className="w-6 h-6 text-gray-500" />, color: 'bg-gray-50' },
   ];
 
   return (
@@ -1068,28 +1148,22 @@ const Dashboard = ({ onViewChange }: { onViewChange: (view: ViewState) => void }
       </div>
 
       {/* Quick Actions Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-4 gap-4">
         {features.map((f) => (
           <button
             key={f.id}
             onClick={() => onViewChange(f.id as ViewState)}
-            className="bg-white p-6 rounded-2xl border border-spiritual-100 shadow-sm hover:shadow-md transition-all text-left group hover:-translate-y-1"
+            className="bg-white p-4 rounded-2xl border border-spiritual-100 shadow-sm hover:shadow-md transition-all text-left group hover:-translate-y-1"
           >
-            <div className={`${f.color} w-14 h-14 rounded-xl flex items-center justify-center mb-4 group-hover:scale-110 transition-transform`}>
+            <div className={`${f.color} w-10 h-10 rounded-xl flex items-center justify-center mb-3 group-hover:scale-110 transition-transform`}>
               {f.icon}
             </div>
-            <h3 className="font-bold text-gray-800 mb-2 flex items-center justify-between text-lg">
+            <h3 className="font-bold text-gray-800 mb-1 flex items-center justify-between text-base">
               {f.title}
-              <ChevronRight className="w-5 h-5 text-gray-300 group-hover:text-spiritual-500 group-hover:translate-x-1 transition-all" />
             </h3>
-            <p className="text-sm text-gray-500">{f.desc}</p>
+            <p className="text-xs text-gray-500">{f.desc}</p>
           </button>
         ))}
-        {/* Fill empty space with "more features" indicator */}
-        <div className="bg-spiritual-50/50 p-6 rounded-2xl border border-dashed border-spiritual-200 flex flex-col justify-center items-center text-center">
-            <span className="text-2xl font-bold text-spiritual-300">500+</span>
-            <span className="text-sm text-spiritual-400">Total Features Planned</span>
-        </div>
       </div>
     </div>
   );
@@ -1113,7 +1187,7 @@ const FeatureList = () => {
 
     const allFeatures = Array.from({ length: 500 }).map((_, i) => ({
         id: i,
-        name: `${categories[i % categories.length]} ${Math.floor(i / categories.length) + 1}`,
+        name: categories[i % categories.length] ? categories[i % categories.length] + (Math.floor(i / categories.length) > 0 ? ` ${Math.floor(i / categories.length) + 1}` : "") : `Feature ${i+1}`,
         status: i < 50 ? 'Active' : 'In Development'
     }));
 
@@ -1288,7 +1362,307 @@ const About = ({ user }: { user: FirebaseUser | null }) => {
     );
 }
 
-// 13. Login Screen
+// 13. Dream Interpreter
+const DreamInterpreter = () => {
+    const [dream, setDream] = useState('');
+    const [interpretation, setInterpretation] = useState('');
+    const [loading, setLoading] = useState(false);
+
+    const handleInterpret = async () => {
+        if(!dream.trim()) return;
+        setLoading(true);
+        try {
+            const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+            const response = await ai.models.generateContent({
+                model: 'gemini-2.5-flash',
+                contents: `Interpret this dream from a biblical and spiritual perspective. Provide relevant scripture and potential symbolic meanings. Dream: "${dream}"`,
+            });
+            setInterpretation(response.text || "Could not interpret dream.");
+        } catch (e) {
+            setInterpretation(generateOfflineResponse("dream"));
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    return (
+        <div className="bg-white rounded-2xl shadow-sm border border-spiritual-100 p-6 h-full flex flex-col max-w-2xl mx-auto">
+             <div className="text-center mb-6">
+                <CloudMoon className="w-12 h-12 text-spiritual-500 mx-auto mb-2" />
+                <h2 className="font-serif text-2xl text-spiritual-800">Biblical Dream Interpretation</h2>
+                <p className="text-gray-500 text-sm">"For God speaks in one way, and in two, though man does not perceive it. In a dream, in a vision of the night..." - Job 33:14-15</p>
+            </div>
+            
+            <textarea
+                placeholder="Describe your dream in detail..."
+                className="w-full p-4 border border-spiritual-200 rounded-xl focus:ring-2 focus:ring-spiritual-300 focus:outline-none min-h-[150px] mb-4 bg-spiritual-50/50"
+                value={dream}
+                onChange={(e) => setDream(e.target.value)}
+            />
+            
+            <button 
+                onClick={handleInterpret}
+                disabled={loading || !dream}
+                className="w-full bg-spiritual-600 text-white py-3 rounded-xl hover:bg-spiritual-700 transition-colors flex items-center justify-center gap-2 mb-6"
+            >
+                {loading ? <Loader2 className="animate-spin w-5 h-5"/> : <BrainCircuit className="w-5 h-5"/>}
+                Reveal Meaning
+            </button>
+
+            {interpretation && (
+                <div className="bg-indigo-50 p-6 rounded-xl border border-indigo-100 animate-in fade-in slide-in-from-bottom-2">
+                    <h3 className="font-bold text-indigo-800 mb-2">Interpretation</h3>
+                    <p className="text-indigo-900/80 leading-relaxed whitespace-pre-wrap">{interpretation}</p>
+                </div>
+            )}
+        </div>
+    );
+};
+
+// 14. Bible Trivia
+const BibleTrivia = () => {
+    const [score, setScore] = useState(0);
+    const [currentQ, setCurrentQ] = useState(0);
+    const [showAnswer, setShowAnswer] = useState(false);
+    
+    const questions = [
+        { q: "Who built the ark?", a: "Noah", options: ["Moses", "Noah", "David", "Abraham"] },
+        { q: "How many days did it rain during the flood?", a: "40", options: ["7", "12", "40", "100"] },
+        { q: "Who defeated Goliath?", a: "David", options: ["Saul", "Solomon", "David", "Samson"] },
+        { q: "What is the last book of the Bible?", a: "Revelation", options: ["Acts", "Genesis", "Revelation", "Jude"] },
+        { q: "Where was Jesus born?", a: "Bethlehem", options: ["Nazareth", "Jerusalem", "Bethlehem", "Galilee"] },
+    ];
+
+    const handleAnswer = (option: string) => {
+        if (showAnswer) return;
+        if (option === questions[currentQ].a) {
+            setScore(score + 1);
+        }
+        setShowAnswer(true);
+    };
+
+    const nextQuestion = () => {
+        setShowAnswer(false);
+        setCurrentQ((prev) => (prev + 1) % questions.length);
+    };
+
+    return (
+        <div className="flex items-center justify-center h-full">
+            <div className="bg-white rounded-3xl shadow-xl border border-spiritual-100 p-8 max-w-md w-full text-center">
+                <Trophy className="w-16 h-16 text-yellow-500 mx-auto mb-4" />
+                <h2 className="font-serif text-2xl font-bold text-spiritual-800 mb-2">Bible Trivia</h2>
+                <p className="text-gray-500 mb-6">Question {currentQ + 1} of {questions.length}</p>
+                
+                <h3 className="text-xl font-bold mb-8 text-gray-800">{questions[currentQ].q}</h3>
+                
+                <div className="grid grid-cols-2 gap-4 mb-6">
+                    {questions[currentQ].options.map((opt) => (
+                        <button
+                            key={opt}
+                            onClick={() => handleAnswer(opt)}
+                            className={`p-4 rounded-xl border-2 transition-all
+                                ${showAnswer 
+                                    ? opt === questions[currentQ].a 
+                                        ? 'bg-green-100 border-green-500 text-green-700' 
+                                        : 'bg-gray-50 border-gray-200 opacity-50'
+                                    : 'bg-white border-spiritual-100 hover:border-spiritual-400 hover:bg-spiritual-50'
+                                }
+                            `}
+                        >
+                            {opt}
+                        </button>
+                    ))}
+                </div>
+
+                {showAnswer && (
+                    <div className="animate-in fade-in">
+                        <p className="mb-4 font-bold text-spiritual-600">Score: {score}</p>
+                        <button onClick={nextQuestion} className="bg-spiritual-600 text-white px-6 py-2 rounded-full hover:bg-spiritual-700">Next Question</button>
+                    </div>
+                )}
+            </div>
+        </div>
+    );
+};
+
+// 15. Mood Tracker
+const MoodTracker = () => {
+    const [moods, setMoods] = useState<{date: string, mood: string}[]>([]);
+    
+    const addMood = (mood: string) => {
+        setMoods([...moods, { date: new Date().toLocaleDateString(), mood }]);
+    };
+
+    return (
+        <div className="bg-white rounded-2xl shadow-sm border border-spiritual-100 p-6 h-full flex flex-col">
+            <h2 className="font-serif text-2xl text-spiritual-800 mb-6">Emotional & Spiritual Wellness</h2>
+            
+            <div className="flex justify-around mb-8">
+                {['Happy', 'Blessed', 'Peaceful', 'Anxious', 'Sad'].map(m => (
+                    <button key={m} onClick={() => addMood(m)} className="flex flex-col items-center gap-2 group">
+                        <div className="w-12 h-12 rounded-full bg-spiritual-50 border border-spiritual-200 flex items-center justify-center group-hover:bg-spiritual-100 transition-colors">
+                            {m === 'Happy' && <Smile className="text-yellow-500"/>}
+                            {m === 'Blessed' && <Sun className="text-orange-500"/>}
+                            {m === 'Peaceful' && <Wind className="text-blue-400"/>}
+                            {m === 'Anxious' && <Activity className="text-red-400"/>}
+                            {m === 'Sad' && <CloudMoon className="text-gray-400"/>}
+                        </div>
+                        <span className="text-xs text-gray-500">{m}</span>
+                    </button>
+                ))}
+            </div>
+
+            <div className="flex-1 bg-spiritual-50 rounded-xl p-4 overflow-y-auto">
+                <h3 className="font-bold text-gray-700 mb-4">History</h3>
+                {moods.length === 0 ? (
+                    <p className="text-gray-400 text-center mt-10">Track your mood to see your journey.</p>
+                ) : (
+                    moods.map((m, i) => (
+                        <div key={i} className="flex justify-between p-3 border-b border-spiritual-200 last:border-0">
+                            <span className="text-gray-600">{m.mood}</span>
+                            <span className="text-gray-400 text-sm">{m.date}</span>
+                        </div>
+                    ))
+                )}
+            </div>
+        </div>
+    );
+};
+
+// 16. Prayer Wall
+const PrayerWall = () => {
+    const [requests, setRequests] = useState([
+        { id: 1, name: "Sarah", text: "Pray for my healing.", count: 12 },
+        { id: 2, name: "John", text: "Guidance for new job.", count: 8 },
+    ]);
+    const [newRequest, setNewRequest] = useState("");
+
+    const addRequest = () => {
+        if (!newRequest) return;
+        setRequests([...requests, { id: Date.now(), name: "Me", text: newRequest, count: 0 }]);
+        setNewRequest("");
+    };
+
+    const pray = (id: number) => {
+        setRequests(requests.map(r => r.id === id ? { ...r, count: r.count + 1 } : r));
+    };
+
+    return (
+        <div className="bg-white rounded-2xl shadow-sm border border-spiritual-100 p-6 h-full flex flex-col">
+            <h2 className="font-serif text-2xl text-spiritual-800 mb-6 flex items-center gap-2"><Users className="w-6 h-6"/> Community Prayer Wall</h2>
+            
+            <div className="flex gap-2 mb-6">
+                <input 
+                    className="flex-1 border border-spiritual-200 rounded-lg p-2"
+                    placeholder="Share a prayer request..."
+                    value={newRequest}
+                    onChange={(e) => setNewRequest(e.target.value)}
+                />
+                <button onClick={addRequest} className="bg-spiritual-600 text-white px-4 rounded-lg hover:bg-spiritual-700">Post</button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto space-y-4">
+                {requests.map(r => (
+                    <div key={r.id} className="p-4 border border-spiritual-100 rounded-xl bg-spiritual-50/30">
+                        <div className="flex justify-between items-start mb-2">
+                            <span className="font-bold text-spiritual-700">{r.name}</span>
+                            <button onClick={() => pray(r.id)} className="text-xs bg-white border border-spiritual-200 px-2 py-1 rounded-full flex items-center gap-1 hover:bg-spiritual-50">
+                                🙏 Prayed ({r.count})
+                            </button>
+                        </div>
+                        <p className="text-gray-600">{r.text}</p>
+                    </div>
+                ))}
+            </div>
+        </div>
+    );
+};
+
+// 17. Settings Component
+const SettingsView = ({ openAIKey, setOpenAIKey, aiProvider, setAIProvider }: any) => {
+    return (
+        <div className="bg-white rounded-2xl shadow-sm border border-spiritual-100 p-6 h-full max-w-2xl mx-auto">
+            <h2 className="font-serif text-2xl text-spiritual-800 mb-6 flex items-center gap-2">
+                <Settings className="w-6 h-6"/> Application Settings
+            </h2>
+
+            <div className="space-y-8">
+                {/* AI Provider Section */}
+                <div className="p-6 bg-spiritual-50 rounded-xl border border-spiritual-100">
+                    <h3 className="font-bold text-lg text-gray-800 mb-4">Artificial Intelligence Provider</h3>
+                    
+                    <div className="space-y-3">
+                        <label className="flex items-center gap-3 p-3 bg-white rounded-lg border border-spiritual-200 cursor-pointer hover:border-spiritual-400 transition-all">
+                            <input 
+                                type="radio" 
+                                name="provider" 
+                                checked={aiProvider === 'gemini'}
+                                onChange={() => setAIProvider('gemini')}
+                                className="w-4 h-4 text-spiritual-600"
+                            />
+                            <div className="flex-1">
+                                <div className="font-semibold text-gray-800">Google Gemini (Default)</div>
+                                <div className="text-xs text-gray-500">Free, fast, and integrated. No key required.</div>
+                            </div>
+                            <Sparkles className="w-5 h-5 text-blue-500"/>
+                        </label>
+
+                        <label className="flex items-center gap-3 p-3 bg-white rounded-lg border border-spiritual-200 cursor-pointer hover:border-spiritual-400 transition-all">
+                            <input 
+                                type="radio" 
+                                name="provider" 
+                                checked={aiProvider === 'openai'}
+                                onChange={() => setAIProvider('openai')}
+                                className="w-4 h-4 text-spiritual-600"
+                            />
+                            <div className="flex-1">
+                                <div className="font-semibold text-gray-800">OpenAI (GPT)</div>
+                                <div className="text-xs text-gray-500">Requires your own API Key.</div>
+                            </div>
+                            <BrainCircuit className="w-5 h-5 text-green-600"/>
+                        </label>
+
+                        <label className="flex items-center gap-3 p-3 bg-white rounded-lg border border-spiritual-200 cursor-pointer hover:border-spiritual-400 transition-all">
+                            <input 
+                                type="radio" 
+                                name="provider" 
+                                checked={aiProvider === 'offline'}
+                                onChange={() => setAIProvider('offline')}
+                                className="w-4 h-4 text-spiritual-600"
+                            />
+                            <div className="flex-1">
+                                <div className="font-semibold text-gray-800">Offline Mode (No API)</div>
+                                <div className="text-xs text-gray-500">Rule-based responses. Works without internet.</div>
+                            </div>
+                            <WifiOff className="w-5 h-5 text-gray-400"/>
+                        </label>
+                    </div>
+
+                    {aiProvider === 'openai' && (
+                        <div className="mt-4 animate-in fade-in">
+                            <label className="block text-sm font-medium text-gray-600 mb-1">OpenAI API Key</label>
+                            <input 
+                                type="password" 
+                                placeholder="sk-..." 
+                                value={openAIKey}
+                                onChange={(e) => setOpenAIKey(e.target.value)}
+                                className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-spiritual-400 outline-none"
+                            />
+                            <p className="text-xs text-gray-400 mt-1">Key is stored locally in your browser.</p>
+                        </div>
+                    )}
+                </div>
+
+                <div className="text-center text-gray-400 text-sm">
+                    <p>Spiritual Welfare v2.0</p>
+                    <p>Created by Akin S. Sokpah</p>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+// 18. Login Screen
 const LoginScreen = ({ onLogin }: { onLogin: () => void }) => {
     return (
         <div className="min-h-screen bg-gradient-to-br from-spiritual-600 to-spiritual-900 flex items-center justify-center p-4">
@@ -1340,6 +1714,14 @@ const App = () => {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [user, setUser] = useState<FirebaseUser | null>(null);
   const [loadingAuth, setLoadingAuth] = useState(true);
+  
+  // Settings State
+  const [openAIKey, setOpenAIKey] = useState(localStorage.getItem('openai_key') || process.env.OPENAI_API_KEY || "");
+  const [aiProvider, setAIProvider] = useState<AIProvider>('gemini');
+
+  useEffect(() => {
+    localStorage.setItem('openai_key', openAIKey);
+  }, [openAIKey]);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
@@ -1374,7 +1756,7 @@ const App = () => {
   const renderContent = () => {
     switch (activeView) {
       case 'home': return <Dashboard onViewChange={setActiveView} />;
-      case 'chat': return <SpiritualChat />;
+      case 'chat': return <SpiritualChat aiProvider={aiProvider} openAIKey={openAIKey} />;
       case 'meditate': return <Meditation />;
       case 'journal': return <Journal />;
       case 'bible': return <BibleReader />;
@@ -1384,6 +1766,11 @@ const App = () => {
       case 'calendar': return <EventCalendar />;
       case 'features': return <FeatureList />;
       case 'about': return <About user={user} />;
+      case 'dreams': return <DreamInterpreter />;
+      case 'trivia': return <BibleTrivia />;
+      case 'mood': return <MoodTracker />;
+      case 'prayers': return <PrayerWall />;
+      case 'settings': return <SettingsView openAIKey={openAIKey} setOpenAIKey={setOpenAIKey} aiProvider={aiProvider} setAIProvider={setAIProvider} />;
       default: return <Dashboard onViewChange={setActiveView} />;
     }
   };
