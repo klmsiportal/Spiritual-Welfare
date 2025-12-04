@@ -52,7 +52,10 @@ import {
   Zap,
   Eye,
   Minimize2,
-  Maximize2
+  Maximize2,
+  Volume2,
+  VolumeX,
+  Camera
 } from 'lucide-react';
 import { GoogleGenAI } from "@google/genai";
 import { initializeApp } from "firebase/app";
@@ -177,10 +180,18 @@ const BIBLE_BOOKS = [
     "Hebrews", "James", "1 Peter", "2 Peter", "1 John", "2 John", "3 John", "Jude", "Revelation"
 ];
 
+const AMBIENT_TRACKS = [
+    { id: 'rain', title: 'Soft Rain', url: 'https://cdn.pixabay.com/download/audio/2022/05/27/audio_1808fbf07a.mp3' }, // Placeholder links
+    { id: 'worship', title: 'Worship Pads', url: 'https://cdn.pixabay.com/download/audio/2024/02/07/audio_c3e031a54f.mp3' },
+    { id: 'deep', title: 'Deep Prayer', url: 'https://cdn.pixabay.com/download/audio/2022/10/25/audio_2490fe8c2b.mp3' },
+    { id: 'video1', title: 'Soaking Worship (YouTube)', type: 'video', url: 'BiG098g8FjQ' }, // Instrumental
+    { id: 'video2', title: 'Piano Prayer (YouTube)', type: 'video', url: 'qjX6s5J5zkw' }
+];
+
 // --- Components ---
 
-// 1. Sidebar
-const Sidebar = ({ activeView, onViewChange, mobileOpen, setMobileOpen, user, onSignOut }: any) => {
+// 1. Sidebar with Ambient Controls
+const Sidebar = ({ activeView, onViewChange, mobileOpen, setMobileOpen, user, onSignOut, onPlayAmbient }: any) => {
   const menuItems = [
     { id: 'home', label: 'Dashboard', icon: <Heart className="w-5 h-5" /> },
     { id: 'bible', label: 'Holy Bible', icon: <BookOpen className="w-5 h-5" /> },
@@ -195,7 +206,7 @@ const Sidebar = ({ activeView, onViewChange, mobileOpen, setMobileOpen, user, on
     { id: 'journal', label: 'My Journal', icon: <PenTool className="w-5 h-5" /> },
     { id: 'prayers', label: 'Prayer Wall', icon: <Zap className="w-5 h-5" /> },
     { id: 'settings', label: 'Settings', icon: <Settings className="w-5 h-5" /> },
-    { id: 'about', label: 'Profile', icon: <User className="w-5 h-5" /> },
+    { id: 'about', label: 'About Creator', icon: <User className="w-5 h-5" /> },
   ];
 
   return (
@@ -218,6 +229,27 @@ const Sidebar = ({ activeView, onViewChange, mobileOpen, setMobileOpen, user, on
           <button onClick={() => setMobileOpen(false)} className="lg:hidden text-gray-500">
             <X className="w-6 h-6" />
           </button>
+        </div>
+
+        {/* Ambient Music Section */}
+        <div className="px-4 py-2">
+            <div className="bg-spiritual-50 rounded-xl p-3 border border-spiritual-100">
+                <div className="flex items-center gap-2 text-spiritual-700 mb-2">
+                    <Volume2 className="w-4 h-4" />
+                    <span className="text-xs font-bold uppercase tracking-wide">Background Audio</span>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                    {AMBIENT_TRACKS.slice(0, 4).map(t => (
+                        <button 
+                            key={t.id}
+                            onClick={() => onPlayAmbient(t)}
+                            className="text-[10px] bg-white border border-spiritual-200 rounded px-2 py-1 text-gray-600 hover:bg-spiritual-100 hover:text-spiritual-700 truncate text-left transition-colors"
+                        >
+                            {t.title}
+                        </button>
+                    ))}
+                </div>
+            </div>
         </div>
 
         <nav className="flex-1 px-4 space-y-1 mt-4 overflow-y-auto scrollbar-hide pb-20">
@@ -267,6 +299,15 @@ const Sidebar = ({ activeView, onViewChange, mobileOpen, setMobileOpen, user, on
 const GlobalPlayer = ({ media, onClose }: { media: MediaItem | null, onClose: () => void }) => {
     const [minimized, setMinimized] = useState(false);
 
+    // Auto-minimize ambient tracks
+    useEffect(() => {
+        if (media?.title.includes("Pad") || media?.title.includes("Rain") || media?.title.includes("Ambient")) {
+            setMinimized(true);
+        } else {
+            setMinimized(false);
+        }
+    }, [media]);
+
     if (!media) return null;
 
     return (
@@ -302,13 +343,13 @@ const GlobalPlayer = ({ media, onClose }: { media: MediaItem | null, onClose: ()
                 </div>
             )}
 
-            {/* Content (YouTube Embed) - Keep mounted but hidden if minimized so audio continues */}
+            {/* Content (YouTube Embed or Audio) */}
             <div className={`flex-1 relative bg-black ${minimized ? 'hidden' : 'block'}`}>
-                 {media.type === 'video' || media.url.length === 11 ? (
+                 {media.type === 'video' || (media.url && media.url.length === 11 && !media.url.includes("http")) ? (
                      <iframe 
                         width="100%" 
                         height="100%" 
-                        src={`https://www.youtube.com/embed/${media.url}?autoplay=1&enablejsapi=1`} 
+                        src={`https://www.youtube.com/embed/${media.url}?autoplay=1&enablejsapi=1&loop=1&playlist=${media.url}`} 
                         title="Media Player" 
                         frameBorder="0" 
                         allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" 
@@ -317,10 +358,29 @@ const GlobalPlayer = ({ media, onClose }: { media: MediaItem | null, onClose: ()
                     ></iframe>
                  ) : (
                      <div className="h-full flex items-center justify-center bg-gray-900">
-                        <audio src={media.url} controls autoPlay className="w-full px-4" />
+                        <div className="absolute inset-0 bg-gradient-to-br from-indigo-900 to-black opacity-50"></div>
+                        <Music className="w-12 h-12 text-white/50 animate-pulse relative z-10" />
+                        <audio src={media.url} controls autoPlay loop className="absolute bottom-0 w-full px-4 mb-4 z-20" />
                      </div>
                  )}
             </div>
+            
+            {/* Hidden Audio for minimized mode if it's not a video iframe */}
+            {minimized && media.type !== 'video' && media.url.includes("http") && (
+                <audio src={media.url} autoPlay loop className="hidden" />
+            )}
+            
+             {/* Hidden Iframe for minimized mode if it IS a video */}
+             {minimized && (media.type === 'video' || !media.url.includes("http")) && (
+                <iframe 
+                    width="100" 
+                    height="100" 
+                    src={`https://www.youtube.com/embed/${media.url}?autoplay=1&enablejsapi=1&loop=1&playlist=${media.url}`} 
+                    title="Hidden Player" 
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" 
+                    className="absolute opacity-0 pointer-events-none"
+                ></iframe>
+            )}
         </div>
     );
 };
@@ -433,43 +493,93 @@ const CommunityChat = ({ user }: { user: FirebaseUser }) => {
     );
 };
 
-// 4. Spiritual Cinema
-const SpiritualCinema = ({ setMedia }: { setMedia: (m: MediaItem) => void }) => {
-    const movies = [
-        { id: '1', title: "The Life of Jesus (Gospel of John)", url: "47MwVJ6y_oI", duration: "2h 53m" },
-        { id: '2', title: "War Room (Prayer Clips)", url: "V1pZf5Q9eQA", duration: "Highlight" },
-        { id: '3', title: "God's Not Dead (Clip)", url: "M1M_d55_H_o", duration: "Highlight" },
-        { id: '4', title: "The Chosen - Episode 1 (Official)", url: "craeyJdrCsE", duration: "54m" },
-        { id: '5', title: "Passion of the Christ (Scene)", url: "0B5u8JgS0wA", duration: "Clip" },
-        { id: '6', title: "Why I Follow Jesus (Testimony)", url: "K48-52_5y6w", duration: "12m" },
-    ];
+// 4. Creator Profile Component
+const CreatorProfile = () => {
+    const [image, setImage] = useState<string>("https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?fit=crop&w=300&h=300");
+
+    const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+        if (e.target.files && e.target.files[0]) {
+            const reader = new FileReader();
+            reader.onload = (ev) => {
+                if (ev.target?.result) setImage(ev.target.result as string);
+            };
+            reader.readAsDataURL(e.target.files[0]);
+        }
+    };
 
     return (
-        <div className="bg-white rounded-2xl shadow-sm border border-spiritual-100 p-6 h-full flex flex-col">
-            <h2 className="font-serif text-3xl text-spiritual-800 font-bold mb-6 flex items-center gap-2">
-                <Film className="w-8 h-8 text-spiritual-600"/> Spiritual Cinema
-            </h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 overflow-y-auto pb-20">
-                {movies.map(movie => (
-                    <div key={movie.id} className="group cursor-pointer" onClick={() => setMedia({ id: movie.id, title: movie.title, type: 'video', url: movie.url })}>
-                        <div className="relative aspect-video rounded-xl overflow-hidden mb-3 shadow-md group-hover:shadow-xl transition-all">
-                            <img 
-                                src={`https://img.youtube.com/vi/${movie.url}/mqdefault.jpg`} 
-                                className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
-                            />
-                            <div className="absolute inset-0 bg-black/30 group-hover:bg-black/10 transition-colors flex items-center justify-center">
-                                <div className="w-12 h-12 bg-white/90 rounded-full flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform">
-                                    <Play className="w-5 h-5 text-spiritual-600 ml-1 fill-current"/>
+        <div className="max-w-4xl mx-auto h-full overflow-y-auto pb-20">
+            <div className="bg-white rounded-3xl shadow-xl border border-spiritual-100 overflow-hidden">
+                <div className="bg-gradient-to-r from-spiritual-800 to-spiritual-600 h-48 relative">
+                    <div className="absolute inset-0 opacity-20 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')]"></div>
+                </div>
+                
+                <div className="px-8 pb-8">
+                    <div className="flex flex-col md:flex-row gap-6 -mt-16 items-start">
+                        <div className="relative group">
+                            <div className="w-40 h-40 rounded-3xl border-4 border-white shadow-2xl overflow-hidden bg-gray-200 relative">
+                                <img 
+                                    src={image} 
+                                    alt="Akin S. Sokpah" 
+                                    className="w-full h-full object-cover transition-transform group-hover:scale-105" 
+                                />
+                                <label className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer">
+                                    <Camera className="w-8 h-8 text-white mb-1" />
+                                    <span className="sr-only">Upload Photo</span>
+                                    <input type="file" className="hidden" accept="image/*" onChange={handleImageUpload} />
+                                </label>
+                            </div>
+                        </div>
+
+                        <div className="flex-1 pt-4 md:pt-16">
+                            <div className="flex justify-between items-start">
+                                <div>
+                                    <h1 className="text-3xl font-bold text-gray-900 font-serif">Akin S. Sokpah</h1>
+                                    <p className="text-spiritual-600 font-medium flex items-center gap-1">
+                                        <MapPin className="w-4 h-4"/> Liberia, West Africa
+                                    </p>
+                                </div>
+                                <div className="flex gap-2">
+                                    <button className="bg-spiritual-600 text-white px-4 py-2 rounded-xl text-sm font-bold shadow-md hover:bg-spiritual-700 transition-colors">
+                                        Contact
+                                    </button>
                                 </div>
                             </div>
-                            <span className="absolute bottom-2 right-2 bg-black/70 text-white text-xs px-2 py-1 rounded">
-                                {movie.duration}
-                            </span>
+
+                            <p className="mt-6 text-gray-600 leading-relaxed font-serif text-lg">
+                                "I created Spiritual Welfare with a vision to merge technology and faith. 
+                                My goal is to provide a sanctuary where over 500 spiritual features—from AI counseling 
+                                to live worship—can help believers grow closer to God. Welcome to my digital ministry."
+                            </p>
+
+                            <div className="mt-8 grid grid-cols-3 gap-4">
+                                <div className="bg-spiritual-50 p-4 rounded-2xl text-center border border-spiritual-100">
+                                    <span className="block text-2xl font-bold text-spiritual-800">500+</span>
+                                    <span className="text-xs text-spiritual-500 uppercase tracking-wide font-bold">Features</span>
+                                </div>
+                                <div className="bg-spiritual-50 p-4 rounded-2xl text-center border border-spiritual-100">
+                                    <span className="block text-2xl font-bold text-spiritual-800">24/7</span>
+                                    <span className="text-xs text-spiritual-500 uppercase tracking-wide font-bold">Worship</span>
+                                </div>
+                                <div className="bg-spiritual-50 p-4 rounded-2xl text-center border border-spiritual-100">
+                                    <span className="block text-2xl font-bold text-spiritual-800">100%</span>
+                                    <span className="text-xs text-spiritual-500 uppercase tracking-wide font-bold">Free</span>
+                                </div>
+                            </div>
+                            
+                            <div className="mt-8 border-t border-gray-100 pt-6">
+                                <h3 className="font-bold text-gray-800 mb-3 flex items-center gap-2">
+                                    <Music className="w-4 h-4 text-spiritual-500"/> Favorite Ambient Tracks
+                                </h3>
+                                <div className="flex gap-2 flex-wrap">
+                                    <span className="px-3 py-1 bg-gray-100 rounded-full text-xs text-gray-600">Soaking Worship</span>
+                                    <span className="px-3 py-1 bg-gray-100 rounded-full text-xs text-gray-600">Deep Prayer</span>
+                                    <span className="px-3 py-1 bg-gray-100 rounded-full text-xs text-gray-600">Prophetic Instrumental</span>
+                                </div>
+                            </div>
                         </div>
-                        <h3 className="font-bold text-gray-800 group-hover:text-spiritual-600 transition-colors">{movie.title}</h3>
-                        <p className="text-sm text-gray-500">Watch Now</p>
                     </div>
-                ))}
+                </div>
             </div>
         </div>
     );
@@ -558,7 +668,49 @@ const Mysteries = () => {
     );
 };
 
-// 6. Updated Bible Reader with Stories
+// 6. Spiritual Cinema
+const SpiritualCinema = ({ setMedia }: { setMedia: (m: MediaItem) => void }) => {
+    const movies = [
+        { id: '1', title: "The Life of Jesus (Gospel of John)", url: "47MwVJ6y_oI", duration: "2h 53m" },
+        { id: '2', title: "War Room (Prayer Clips)", url: "V1pZf5Q9eQA", duration: "Highlight" },
+        { id: '3', title: "God's Not Dead (Clip)", url: "M1M_d55_H_o", duration: "Highlight" },
+        { id: '4', title: "The Chosen - Episode 1 (Official)", url: "craeyJdrCsE", duration: "54m" },
+        { id: '5', title: "Passion of the Christ (Scene)", url: "0B5u8JgS0wA", duration: "Clip" },
+        { id: '6', title: "Why I Follow Jesus (Testimony)", url: "K48-52_5y6w", duration: "12m" },
+    ];
+
+    return (
+        <div className="bg-white rounded-2xl shadow-sm border border-spiritual-100 p-6 h-full flex flex-col">
+            <h2 className="font-serif text-3xl text-spiritual-800 font-bold mb-6 flex items-center gap-2">
+                <Film className="w-8 h-8 text-spiritual-600"/> Spiritual Cinema
+            </h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 overflow-y-auto pb-20">
+                {movies.map(movie => (
+                    <div key={movie.id} className="group cursor-pointer" onClick={() => setMedia({ id: movie.id, title: movie.title, type: 'video', url: movie.url })}>
+                        <div className="relative aspect-video rounded-xl overflow-hidden mb-3 shadow-md group-hover:shadow-xl transition-all">
+                            <img 
+                                src={`https://img.youtube.com/vi/${movie.url}/mqdefault.jpg`} 
+                                className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
+                            />
+                            <div className="absolute inset-0 bg-black/30 group-hover:bg-black/10 transition-colors flex items-center justify-center">
+                                <div className="w-12 h-12 bg-white/90 rounded-full flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform">
+                                    <Play className="w-5 h-5 text-spiritual-600 ml-1 fill-current"/>
+                                </div>
+                            </div>
+                            <span className="absolute bottom-2 right-2 bg-black/70 text-white text-xs px-2 py-1 rounded">
+                                {movie.duration}
+                            </span>
+                        </div>
+                        <h3 className="font-bold text-gray-800 group-hover:text-spiritual-600 transition-colors">{movie.title}</h3>
+                        <p className="text-sm text-gray-500">Watch Now</p>
+                    </div>
+                ))}
+            </div>
+        </div>
+    );
+};
+
+// 7. Updated Bible Reader with Stories
 const BibleReader = () => {
     const [book, setBook] = useState("Genesis");
     const [chapter, setChapter] = useState(1);
@@ -643,7 +795,7 @@ const BibleReader = () => {
     );
 };
 
-// 7. Updated Dashboard
+// 8. Updated Dashboard
 const Dashboard = ({ onViewChange }: { onViewChange: (view: ViewState) => void }) => {
     // ... existing dashboard code ...
     // Simplified for brevity, same layout as before just ensuring links work
@@ -656,6 +808,7 @@ const Dashboard = ({ onViewChange }: { onViewChange: (view: ViewState) => void }
         { id: 'worship', title: 'Worship', desc: 'Music Player', icon: <Music className="w-6 h-6 text-rose-500" />, color: 'bg-rose-50' },
         { id: 'tv', title: 'Gospel TV', desc: 'Live Channels', icon: <Tv className="w-6 h-6 text-red-600" />, color: 'bg-red-50' },
         { id: 'journal', title: 'Journal', desc: 'Write Thoughts', icon: <PenTool className="w-6 h-6 text-green-500" />, color: 'bg-green-50' },
+        { id: 'about', title: 'About Creator', desc: 'Akin S. Sokpah', icon: <User className="w-6 h-6 text-cyan-500" />, color: 'bg-cyan-50' },
     ];
 
     return (
@@ -692,10 +845,9 @@ const Journal = () => <div className="p-8 bg-white rounded-2xl text-center"><Pen
 const Meditation = () => <div className="p-8 bg-white rounded-2xl text-center"><Wind className="w-16 h-16 mx-auto mb-4 text-green-300"/><h2 className="text-2xl font-serif">Meditation Active</h2></div>;
 const DreamInterpreter = () => <div className="p-8 bg-white rounded-2xl text-center"><CloudMoon className="w-16 h-16 mx-auto mb-4 text-indigo-300"/><h2 className="text-2xl font-serif">Dream Interpreter Active</h2></div>;
 const SettingsView = () => <div className="p-8 bg-white rounded-2xl text-center"><Settings className="w-16 h-16 mx-auto mb-4 text-gray-300"/><h2 className="text-2xl font-serif">Settings Active</h2></div>;
-const About = ({user}: any) => <div className="p-8 bg-white rounded-2xl text-center"><User className="w-16 h-16 mx-auto mb-4 text-spiritual-300"/><h2 className="text-2xl font-serif">Profile: {user?.displayName}</h2></div>;
 const PrayerWall = () => <div className="p-8 bg-white rounded-2xl text-center"><Zap className="w-16 h-16 mx-auto mb-4 text-yellow-300"/><h2 className="text-2xl font-serif">Prayer Wall Active</h2></div>;
 
-// 8. Updated Gospel TV (Connects to Global Player)
+// 9. Updated Gospel TV (Connects to Global Player)
 const GospelTV = ({ setMedia }: { setMedia: (m: MediaItem) => void }) => {
     const channels = [
         { name: "Gospel Worship 24/7", vidId: "M2CC6g3O4iI" }, 
@@ -723,7 +875,7 @@ const GospelTV = ({ setMedia }: { setMedia: (m: MediaItem) => void }) => {
     );
 };
 
-// 9. Updated Worship (Connects to Global Player)
+// 10. Updated Worship (Connects to Global Player)
 const Worship = ({ setMedia }: { setMedia: (m: MediaItem) => void }) => {
     const songs = [
         { id: "1", title: "Oceans (Hillsong)", vidId: "OP-00EwLdiU" },
@@ -752,7 +904,7 @@ const Worship = ({ setMedia }: { setMedia: (m: MediaItem) => void }) => {
     );
 };
 
-// 10. Login Screen
+// 11. Login Screen
 const LoginScreen = ({ onLogin }: { onLogin: () => void }) => {
     return (
         <div className="min-h-screen bg-gradient-to-br from-spiritual-600 to-spiritual-900 flex items-center justify-center p-4">
@@ -783,7 +935,7 @@ const LoginScreen = ({ onLogin }: { onLogin: () => void }) => {
     );
 };
 
-// 11. Main App
+// 12. Main App
 const App = () => {
   const [activeView, setActiveView] = useState<ViewState>('home');
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -844,6 +996,16 @@ const App = () => {
 
   const handleSignOut = () => signOut(auth);
 
+  // Load Ambient Track
+  const playAmbient = (track: any) => {
+      setCurrentMedia({
+          id: track.id,
+          title: `Ambient: ${track.title}`,
+          type: track.type || 'audio',
+          url: track.url
+      });
+  };
+
   if (loadingAuth) return <div className="h-screen flex items-center justify-center bg-spiritual-50"><Loader2 className="w-10 h-10 text-spiritual-500 animate-spin" /></div>;
   if (!user) return <LoginScreen onLogin={handleGoogleLogin} />;
 
@@ -861,7 +1023,7 @@ const App = () => {
       case 'journal': return <Journal />;
       case 'dreams': return <DreamInterpreter />;
       case 'prayers': return <PrayerWall />;
-      case 'about': return <About user={user} />;
+      case 'about': return <CreatorProfile />;
       case 'settings': return <SettingsView />;
       default: return <Dashboard onViewChange={setActiveView} />;
     }
@@ -876,6 +1038,7 @@ const App = () => {
         setMobileOpen={setMobileOpen}
         user={user}
         onSignOut={handleSignOut}
+        onPlayAmbient={playAmbient}
       />
 
       <main className="flex-1 flex flex-col min-w-0 relative h-full">
