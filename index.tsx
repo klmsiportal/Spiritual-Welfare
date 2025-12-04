@@ -55,9 +55,10 @@ import {
   Maximize2,
   Volume2,
   VolumeX,
-  Camera
+  Camera,
+  Phone,
+  Mail
 } from 'lucide-react';
-import { GoogleGenAI } from "@google/genai";
 import { initializeApp } from "firebase/app";
 import { getAuth, signInWithPopup, GoogleAuthProvider, onAuthStateChanged, signOut, User as FirebaseUser } from "firebase/auth";
 import { getFirestore, collection, addDoc, query, orderBy, onSnapshot, limit, serverTimestamp, Timestamp } from "firebase/firestore";
@@ -78,77 +79,8 @@ const auth = getAuth(app);
 const db = getFirestore(app);
 const googleProvider = new GoogleAuthProvider();
 
-// --- AI Services & Configuration ---
-
-const callGenericLLM = async (
-    endpoint: string, 
-    apiKey: string, 
-    model: string, 
-    prompt: string, 
-    systemPrompt: string
-) => {
-    try {
-        const headers: any = {
-            "Content-Type": "application/json",
-        };
-        if (apiKey) {
-            headers["Authorization"] = `Bearer ${apiKey}`;
-        }
-
-        const response = await fetch(endpoint, {
-            method: "POST",
-            headers: headers,
-            body: JSON.stringify({
-                model: model,
-                messages: [
-                    { role: "system", content: systemPrompt },
-                    { role: "user", content: prompt }
-                ],
-                temperature: 0.7
-            })
-        });
-        
-        if (!response.ok) {
-            const errText = await response.text();
-            throw new Error(`API Failed: ${response.status} - ${errText}`);
-        }
-        
-        const data = await response.json();
-        return data.choices[0].message.content;
-    } catch (error) {
-        console.error("LLM Error:", error);
-        throw error;
-    }
-};
-
-const generateOfflineResponse = (input: string) => {
-    const lower = input.toLowerCase();
-    if (lower.includes('sad') || lower.includes('depress')) return "The Lord is close to the brokenhearted and saves those who are crushed in spirit. (Psalm 34:18). You are loved.";
-    if (lower.includes('anxious') || lower.includes('worry')) return "Do not be anxious about anything, but in every situation, by prayer and petition, present your requests to God. (Philippians 4:6)";
-    if (lower.includes('love')) return "Love is patient, love is kind. It does not envy, it does not boast, it is not proud. (1 Corinthians 13:4)";
-    if (lower.includes('thank')) return "Give thanks in all circumstances; for this is God's will for you in Christ Jesus. (1 Thessalonians 5:18)";
-    if (lower.includes('dream')) return "Dreams can be messages. Pray for wisdom to understand what your spirit is saying.";
-    if (lower.includes('fear') || lower.includes('afraid')) return "For God has not given us a spirit of fear, but of power and of love and of a sound mind. (2 Timothy 1:7)";
-    return "I am currently in offline mode, but remember: Faith is the assurance of things hoped for, the conviction of things not seen. How else can I help locally?";
-};
-
 // --- Types ---
-type Message = {
-  id: string;
-  role: 'user' | 'model';
-  text: string;
-  timestamp: Date;
-};
-
-type JournalEntry = {
-  id: string;
-  title: string;
-  content: string;
-  date: string;
-  reminder?: string;
-};
-
-type ViewState = 'home' | 'chat' | 'meditate' | 'journal' | 'bible' | 'worship' | 'features' | 'about' | 'affirmations' | 'calendar' | 'tv' | 'dreams' | 'trivia' | 'mood' | 'prayers' | 'settings' | 'cinema' | 'mysteries' | 'community';
+type ViewState = 'home' | 'topics' | 'meditate' | 'journal' | 'bible' | 'worship' | 'features' | 'about' | 'affirmations' | 'calendar' | 'tv' | 'trivia' | 'mood' | 'prayers' | 'settings' | 'cinema' | 'mysteries' | 'community';
 
 type MediaItem = {
     id: string;
@@ -167,8 +99,6 @@ type ChatMessage = {
     createdAt: any; 
 };
 
-type AIProvider = 'gemini' | 'openai' | 'custom' | 'offline';
-
 // --- Constants ---
 const BIBLE_BOOKS = [
     "Genesis", "Exodus", "Leviticus", "Numbers", "Deuteronomy", "Joshua", "Judges", "Ruth", "1 Samuel", "2 Samuel", 
@@ -181,16 +111,19 @@ const BIBLE_BOOKS = [
 ];
 
 const AMBIENT_TRACKS = [
-    { id: 'rain', title: 'Soft Rain', url: 'https://cdn.pixabay.com/download/audio/2022/05/27/audio_1808fbf07a.mp3' }, // Placeholder links
-    { id: 'worship', title: 'Worship Pads', url: 'https://cdn.pixabay.com/download/audio/2024/02/07/audio_c3e031a54f.mp3' },
-    { id: 'deep', title: 'Deep Prayer', url: 'https://cdn.pixabay.com/download/audio/2022/10/25/audio_2490fe8c2b.mp3' },
-    { id: 'video1', title: 'Soaking Worship (YouTube)', type: 'video', url: 'BiG098g8FjQ' }, // Instrumental
-    { id: 'video2', title: 'Piano Prayer (YouTube)', type: 'video', url: 'qjX6s5J5zkw' }
+    { id: 'video1', title: 'Soaking Worship (YouTube)', type: 'video', url: 'BiG098g8FjQ' }, 
+    { id: 'video2', title: 'Piano Prayer (YouTube)', type: 'video', url: 'qjX6s5J5zkw' },
+    { id: 'video3', title: 'Holy Spirit Atmosphere', type: 'video', url: '73w3zD3X9b8' },
+    { id: 'video4', title: 'Alone With God', type: 'video', url: '1s58rW0_LN4' },
+    { id: 'video5', title: 'Secret Place', type: 'video', url: 'j4mR1v_r2F4' },
+    { id: 'video6', title: 'Deep Prayer Music', type: 'video', url: 's7j6e1g5d8w' },
+    { id: 'rain', title: 'Soft Rain Audio', url: 'https://cdn.pixabay.com/download/audio/2022/05/27/audio_1808fbf07a.mp3' },
+    { id: 'pads', title: 'Worship Pads Audio', url: 'https://cdn.pixabay.com/download/audio/2024/02/07/audio_c3e031a54f.mp3' },
 ];
 
 // --- Components ---
 
-// 1. Sidebar with Ambient Controls
+// 1. Sidebar
 const Sidebar = ({ activeView, onViewChange, mobileOpen, setMobileOpen, user, onSignOut, onPlayAmbient }: any) => {
   const menuItems = [
     { id: 'home', label: 'Dashboard', icon: <Heart className="w-5 h-5" /> },
@@ -199,13 +132,11 @@ const Sidebar = ({ activeView, onViewChange, mobileOpen, setMobileOpen, user, on
     { id: 'tv', label: 'Gospel TV Live', icon: <Tv className="w-5 h-5" /> },
     { id: 'cinema', label: 'Spiritual Cinema', icon: <Film className="w-5 h-5" /> },
     { id: 'community', label: 'Community Chat', icon: <Users className="w-5 h-5" /> },
-    { id: 'chat', label: 'AI Counselor', icon: <MessageCircle className="w-5 h-5" /> },
+    { id: 'topics', label: 'Scripture Guide', icon: <List className="w-5 h-5" /> }, // Replaced AI Chat
     { id: 'mysteries', label: 'Mysteries & Prophecy', icon: <Eye className="w-5 h-5" /> },
-    { id: 'dreams', label: 'Dream Interpreter', icon: <CloudMoon className="w-5 h-5" /> },
     { id: 'meditate', label: 'Meditation', icon: <Wind className="w-5 h-5" /> },
     { id: 'journal', label: 'My Journal', icon: <PenTool className="w-5 h-5" /> },
     { id: 'prayers', label: 'Prayer Wall', icon: <Zap className="w-5 h-5" /> },
-    { id: 'settings', label: 'Settings', icon: <Settings className="w-5 h-5" /> },
     { id: 'about', label: 'About Creator', icon: <User className="w-5 h-5" /> },
   ];
 
@@ -236,15 +167,16 @@ const Sidebar = ({ activeView, onViewChange, mobileOpen, setMobileOpen, user, on
             <div className="bg-spiritual-50 rounded-xl p-3 border border-spiritual-100">
                 <div className="flex items-center gap-2 text-spiritual-700 mb-2">
                     <Volume2 className="w-4 h-4" />
-                    <span className="text-xs font-bold uppercase tracking-wide">Background Audio</span>
+                    <span className="text-xs font-bold uppercase tracking-wide">Ambient Music</span>
                 </div>
-                <div className="grid grid-cols-2 gap-2">
-                    {AMBIENT_TRACKS.slice(0, 4).map(t => (
+                <div className="space-y-1 h-24 overflow-y-auto scrollbar-hide">
+                    {AMBIENT_TRACKS.map(t => (
                         <button 
                             key={t.id}
                             onClick={() => onPlayAmbient(t)}
-                            className="text-[10px] bg-white border border-spiritual-200 rounded px-2 py-1 text-gray-600 hover:bg-spiritual-100 hover:text-spiritual-700 truncate text-left transition-colors"
+                            className="w-full text-[10px] bg-white border border-spiritual-200 rounded px-2 py-1 text-gray-600 hover:bg-spiritual-100 hover:text-spiritual-700 truncate text-left transition-colors flex items-center gap-2"
                         >
+                            {t.type === 'video' ? <Tv className="w-3 h-3"/> : <Music className="w-3 h-3"/>}
                             {t.title}
                         </button>
                     ))}
@@ -301,7 +233,7 @@ const GlobalPlayer = ({ media, onClose }: { media: MediaItem | null, onClose: ()
 
     // Auto-minimize ambient tracks
     useEffect(() => {
-        if (media?.title.includes("Pad") || media?.title.includes("Rain") || media?.title.includes("Ambient")) {
+        if (media?.title.includes("Pad") || media?.title.includes("Rain") || media?.title.includes("Ambient") || media?.title.includes("Prayer")) {
             setMinimized(true);
         } else {
             setMinimized(false);
@@ -407,11 +339,6 @@ const CommunityChat = ({ user }: { user: FirebaseUser }) => {
             setMessages(msgs.reverse());
         }, (error) => {
             console.error("Chat Error:", error);
-            // Fallback for demo if Firestore permissions fail
-            setMessages([
-                { id: '1', text: "Welcome to the fellowship chat!", userId: 'system', displayName: 'System', photoURL: '', createdAt: new Date() },
-                { id: '2', text: "Share your testimony or ask for prayer here.", userId: 'system', displayName: 'System', photoURL: '', createdAt: new Date() }
-            ]);
         });
         
         return () => unsubscribe();
@@ -444,11 +371,11 @@ const CommunityChat = ({ user }: { user: FirebaseUser }) => {
         <div className="flex flex-col h-full bg-white rounded-2xl shadow-sm border border-spiritual-100 overflow-hidden">
             <div className="p-4 border-b border-spiritual-100 bg-spiritual-50 flex justify-between items-center">
                 <h2 className="font-serif text-xl font-bold text-spiritual-800 flex items-center gap-2">
-                    <Users className="w-5 h-5"/> Global Fellowship
+                    <Users className="w-5 h-5"/> Global Christian Fellowship
                 </h2>
                 <div className="flex items-center gap-2 text-xs text-green-600">
                     <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse"/>
-                    Live
+                    Online
                 </div>
             </div>
             
@@ -481,7 +408,7 @@ const CommunityChat = ({ user }: { user: FirebaseUser }) => {
             <form onSubmit={sendMessage} className="p-4 bg-white border-t border-spiritual-100 flex gap-2">
                 <input 
                     className="flex-1 border border-spiritual-200 rounded-full px-4 py-2 focus:outline-none focus:ring-2 focus:ring-spiritual-300"
-                    placeholder="Type a message of encouragement..."
+                    placeholder="Share a scripture or testimony..."
                     value={newMessage}
                     onChange={(e) => setNewMessage(e.target.value)}
                 />
@@ -495,7 +422,9 @@ const CommunityChat = ({ user }: { user: FirebaseUser }) => {
 
 // 4. Creator Profile Component
 const CreatorProfile = () => {
-    const [image, setImage] = useState<string>("https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?fit=crop&w=300&h=300");
+    // Placeholder image that can be replaced by user upload. 
+    // Since I cannot read local files from prompt, we start with a generic silhouette or placeholder
+    const [image, setImage] = useState<string>("https://cdn.pixabay.com/photo/2015/10/05/22/37/blank-profile-picture-973460_1280.png");
 
     const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
         if (e.target.files && e.target.files[0]) {
@@ -539,42 +468,45 @@ const CreatorProfile = () => {
                                         <MapPin className="w-4 h-4"/> Liberia, West Africa
                                     </p>
                                 </div>
-                                <div className="flex gap-2">
-                                    <button className="bg-spiritual-600 text-white px-4 py-2 rounded-xl text-sm font-bold shadow-md hover:bg-spiritual-700 transition-colors">
-                                        Contact
-                                    </button>
-                                </div>
                             </div>
 
                             <p className="mt-6 text-gray-600 leading-relaxed font-serif text-lg">
                                 "I created Spiritual Welfare with a vision to merge technology and faith. 
-                                My goal is to provide a sanctuary where over 500 spiritual features—from AI counseling 
-                                to live worship—can help believers grow closer to God. Welcome to my digital ministry."
+                                My goal is to provide a sanctuary where believers can access the word of God, worship, and fellowship freely."
                             </p>
+
+                            <div className="mt-6 space-y-2">
+                                <div className="flex items-center gap-3 text-gray-700 bg-gray-50 p-3 rounded-lg border border-gray-100">
+                                    <Phone className="w-5 h-5 text-spiritual-500" />
+                                    <span className="font-semibold">+231 88 918 3557</span>
+                                </div>
+                                <div className="flex items-center gap-3 text-gray-700 bg-gray-50 p-3 rounded-lg border border-gray-100">
+                                    <Mail className="w-5 h-5 text-spiritual-500" />
+                                    <span className="font-semibold">sokpahakinsaye@gmail.com</span>
+                                </div>
+                                <a 
+                                    href="https://www.facebook.com/profile.php?id=61583456361691" 
+                                    target="_blank" 
+                                    rel="noopener noreferrer"
+                                    className="flex items-center gap-3 text-blue-700 bg-blue-50 p-3 rounded-lg border border-blue-100 hover:bg-blue-100 transition-colors"
+                                >
+                                    <Facebook className="w-5 h-5" />
+                                    <span className="font-semibold">Connect on Facebook</span>
+                                </a>
+                            </div>
 
                             <div className="mt-8 grid grid-cols-3 gap-4">
                                 <div className="bg-spiritual-50 p-4 rounded-2xl text-center border border-spiritual-100">
-                                    <span className="block text-2xl font-bold text-spiritual-800">500+</span>
-                                    <span className="text-xs text-spiritual-500 uppercase tracking-wide font-bold">Features</span>
+                                    <span className="block text-2xl font-bold text-spiritual-800">100%</span>
+                                    <span className="text-xs text-spiritual-500 uppercase tracking-wide font-bold">Gospel</span>
                                 </div>
                                 <div className="bg-spiritual-50 p-4 rounded-2xl text-center border border-spiritual-100">
                                     <span className="block text-2xl font-bold text-spiritual-800">24/7</span>
                                     <span className="text-xs text-spiritual-500 uppercase tracking-wide font-bold">Worship</span>
                                 </div>
                                 <div className="bg-spiritual-50 p-4 rounded-2xl text-center border border-spiritual-100">
-                                    <span className="block text-2xl font-bold text-spiritual-800">100%</span>
-                                    <span className="text-xs text-spiritual-500 uppercase tracking-wide font-bold">Free</span>
-                                </div>
-                            </div>
-                            
-                            <div className="mt-8 border-t border-gray-100 pt-6">
-                                <h3 className="font-bold text-gray-800 mb-3 flex items-center gap-2">
-                                    <Music className="w-4 h-4 text-spiritual-500"/> Favorite Ambient Tracks
-                                </h3>
-                                <div className="flex gap-2 flex-wrap">
-                                    <span className="px-3 py-1 bg-gray-100 rounded-full text-xs text-gray-600">Soaking Worship</span>
-                                    <span className="px-3 py-1 bg-gray-100 rounded-full text-xs text-gray-600">Deep Prayer</span>
-                                    <span className="px-3 py-1 bg-gray-100 rounded-full text-xs text-gray-600">Prophetic Instrumental</span>
+                                    <span className="block text-2xl font-bold text-spiritual-800">Free</span>
+                                    <span className="text-xs text-spiritual-500 uppercase tracking-wide font-bold">Forever</span>
                                 </div>
                             </div>
                         </div>
@@ -585,36 +517,24 @@ const CreatorProfile = () => {
     );
 };
 
-// 5. Mysteries & Prophecy (Fearful Things to Know)
+// 5. Mysteries & Prophecy (Hardcoded Static Content - No AI)
 const Mysteries = () => {
-    const topics = [
-        { title: "The Book of Revelation", desc: "Understanding the end times, the mark of the beast, and the final victory.", color: "bg-red-50 text-red-800" },
-        { title: "Angels & Demons", desc: "The spiritual warfare happening around us unseen.", color: "bg-indigo-50 text-indigo-800" },
-        { title: "Heaven & Hell", desc: "What the Bible actually says about the afterlife.", color: "bg-amber-50 text-amber-800" },
-        { title: "The Antichrist", desc: "Signs of the coming deception.", color: "bg-gray-100 text-gray-800" },
-        { title: "Prophecies Fulfilled", desc: "Historical evidence of God's word coming true.", color: "bg-green-50 text-green-800" },
-    ];
+    // Static content library
+    const library: Record<string, string> = {
+        "The Book of Revelation": "The Book of Revelation is the final book of the New Testament. It was written by John the Apostle on the island of Patmos. It describes prophetic visions of the end times, the ultimate victory of Jesus Christ over evil, and the establishment of the New Heaven and New Earth. Key themes include the Seven Seals, the Seven Trumpets, the Beast, and the return of the King.",
+        "Angels & Demons": "The Bible teaches that spiritual warfare is real (Ephesians 6:12). Angels are ministering spirits sent to serve those who will inherit salvation (Hebrews 1:14). Demons are fallen angels who rebelled with Lucifer. Believers are given authority over the enemy through the name of Jesus Christ.",
+        "Heaven & Hell": "Heaven is the dwelling place of God, a place of eternal joy, worship, and peace prepared for those who love Him. Hell is described as a place of separation from God. Jesus spoke more about hell than anyone else in scripture, warning us to choose life.",
+        "The Antichrist": "Scripture warns of a figure of lawlessness who will deceive many before the return of Christ (2 Thessalonians 2). He will oppose God and exalt himself. Believers are called to be watchful, rooted in truth, and not deceived by false signs and wonders.",
+        "Prophecies Fulfilled": "The Bible contains hundreds of prophecies that have already been fulfilled, particularly concerning the birth, life, death, and resurrection of Jesus. For example, Isaiah 53 accurately predicted the suffering servant centuries before Christ was born.",
+    };
+
+    const topics = Object.keys(library).map(t => ({ 
+        title: t, 
+        desc: "Biblical truth regarding this mystery.",
+        color: "bg-spiritual-50 text-spiritual-800"
+    }));
 
     const [selectedTopic, setSelectedTopic] = useState<string | null>(null);
-    const [content, setContent] = useState("");
-    const [loading, setLoading] = useState(false);
-
-    const loadTopic = async (topic: string) => {
-        setSelectedTopic(topic);
-        setLoading(true);
-        try {
-            const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-            const response = await ai.models.generateContent({
-                model: 'gemini-2.5-flash',
-                contents: `Write a deep, biblically accurate summary about: "${topic}". Include scripture references. Tone should be serious, mysterious but hopeful.`,
-            });
-            setContent(response.text || "Content unavailable.");
-        } catch (e) {
-            setContent("Offline: Please read the Book of Revelation for more insight.");
-        } finally {
-            setLoading(false);
-        }
-    };
 
     return (
         <div className="bg-white rounded-2xl shadow-sm border border-spiritual-100 h-full flex flex-col md:flex-row overflow-hidden">
@@ -627,7 +547,7 @@ const Mysteries = () => {
                     {topics.map(t => (
                         <button 
                             key={t.title}
-                            onClick={() => loadTopic(t.title)}
+                            onClick={() => setSelectedTopic(t.title)}
                             className={`w-full text-left p-4 rounded-xl transition-all border border-transparent hover:shadow-md
                                 ${selectedTopic === t.title ? 'bg-white shadow-md border-spiritual-200 ring-1 ring-spiritual-100' : 'hover:bg-white'}
                             `}
@@ -650,17 +570,9 @@ const Mysteries = () => {
                 ) : (
                     <div className="max-w-2xl mx-auto animate-in fade-in slide-in-from-bottom-4">
                         <h2 className="font-serif text-4xl text-spiritual-900 font-bold mb-6">{selectedTopic}</h2>
-                        {loading ? (
-                            <div className="space-y-4">
-                                <div className="h-4 bg-gray-100 rounded w-3/4 animate-pulse"></div>
-                                <div className="h-4 bg-gray-100 rounded w-full animate-pulse"></div>
-                                <div className="h-4 bg-gray-100 rounded w-5/6 animate-pulse"></div>
-                            </div>
-                        ) : (
-                            <div className="prose prose-lg prose-spiritual text-gray-700 leading-relaxed whitespace-pre-wrap font-serif">
-                                {content}
-                            </div>
-                        )}
+                        <div className="prose prose-lg prose-spiritual text-gray-700 leading-relaxed whitespace-pre-wrap font-serif">
+                            {library[selectedTopic]}
+                        </div>
                     </div>
                 )}
             </div>
@@ -668,7 +580,48 @@ const Mysteries = () => {
     );
 };
 
-// 6. Spiritual Cinema
+// 6. Scripture Topic Guide (Replaces AI Chat)
+const TopicGuide = () => {
+    const [searchTerm, setSearchTerm] = useState("");
+    const topics = [
+        { name: "Anxiety", verse: "Philippians 4:6-7", text: "Do not be anxious about anything, but in every situation, by prayer and petition, with thanksgiving, present your requests to God." },
+        { name: "Fear", verse: "Isaiah 41:10", text: "So do not fear, for I am with you; do not be dismayed, for I am your God. I will strengthen you and help you." },
+        { name: "Sadness", verse: "Psalm 34:18", text: "The Lord is close to the brokenhearted and saves those who are crushed in spirit." },
+        { name: "Strength", verse: "Isaiah 40:31", text: "But those who hope in the Lord will renew their strength. They will soar on wings like eagles." },
+        { name: "Love", verse: "1 Corinthians 13:4-7", text: "Love is patient, love is kind. It does not envy, it does not boast, it is not proud." },
+        { name: "Forgiveness", verse: "Ephesians 4:32", text: "Be kind and compassionate to one another, forgiving each other, just as in Christ God forgave you." },
+    ];
+
+    const filtered = topics.filter(t => t.name.toLowerCase().includes(searchTerm.toLowerCase()));
+
+    return (
+        <div className="bg-white rounded-2xl h-full flex flex-col border border-spiritual-100 shadow-sm p-6">
+            <h2 className="font-serif text-2xl font-bold mb-4 flex items-center gap-2"><List className="w-6 h-6 text-spiritual-600"/> Scripture Topic Guide</h2>
+            <div className="mb-6">
+                <div className="relative">
+                    <Search className="absolute left-3 top-3 w-5 h-5 text-gray-400"/>
+                    <input 
+                        className="w-full pl-10 p-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-spiritual-200 focus:outline-none"
+                        placeholder="Search for a feeling (e.g., Fear, Love)..."
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                    />
+                </div>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 overflow-y-auto pb-20">
+                {filtered.map(t => (
+                    <div key={t.name} className="p-5 bg-spiritual-50 rounded-xl border border-spiritual-100 hover:shadow-md transition-shadow">
+                        <h3 className="font-bold text-spiritual-800 text-lg mb-1">{t.name}</h3>
+                        <p className="text-sm font-bold text-spiritual-500 mb-2">{t.verse}</p>
+                        <p className="text-gray-700 italic font-serif">"{t.text}"</p>
+                    </div>
+                ))}
+            </div>
+        </div>
+    );
+};
+
+// 7. Spiritual Cinema
 const SpiritualCinema = ({ setMedia }: { setMedia: (m: MediaItem) => void }) => {
     const movies = [
         { id: '1', title: "The Life of Jesus (Gospel of John)", url: "47MwVJ6y_oI", duration: "2h 53m" },
@@ -710,7 +663,7 @@ const SpiritualCinema = ({ setMedia }: { setMedia: (m: MediaItem) => void }) => 
     );
 };
 
-// 7. Updated Bible Reader with Stories
+// 8. Updated Bible Reader with Stories
 const BibleReader = () => {
     const [book, setBook] = useState("Genesis");
     const [chapter, setChapter] = useState(1);
@@ -795,13 +748,11 @@ const BibleReader = () => {
     );
 };
 
-// 8. Updated Dashboard
+// 9. Dashboard
 const Dashboard = ({ onViewChange }: { onViewChange: (view: ViewState) => void }) => {
-    // ... existing dashboard code ...
-    // Simplified for brevity, same layout as before just ensuring links work
     const features = [
-        { id: 'chat', title: 'AI Guide', desc: 'Ask Spiritual Questions', icon: <MessageCircle className="w-6 h-6 text-blue-500" />, color: 'bg-blue-50' },
-        { id: 'community', title: 'Global Chat', desc: 'Talk to Others', icon: <Users className="w-6 h-6 text-indigo-500" />, color: 'bg-indigo-50' },
+        { id: 'topics', title: 'Scripture Guide', desc: 'Find Biblical Answers', icon: <List className="w-6 h-6 text-blue-500" />, color: 'bg-blue-50' },
+        { id: 'community', title: 'Global Chat', desc: 'Fellowship', icon: <Users className="w-6 h-6 text-indigo-500" />, color: 'bg-indigo-50' },
         { id: 'cinema', title: 'Cinema', desc: 'Spiritual Movies', icon: <Film className="w-6 h-6 text-red-500" />, color: 'bg-red-50' },
         { id: 'mysteries', title: 'Mysteries', desc: 'Prophecy & Truth', icon: <Eye className="w-6 h-6 text-purple-500" />, color: 'bg-purple-50' },
         { id: 'bible', title: 'Bible', desc: 'Read Scriptures', icon: <BookOpen className="w-6 h-6 text-amber-500" />, color: 'bg-amber-50' },
@@ -815,7 +766,7 @@ const Dashboard = ({ onViewChange }: { onViewChange: (view: ViewState) => void }
         <div className="space-y-6 animate-in fade-in duration-500 pb-20">
              <div className="bg-gradient-to-r from-spiritual-600 to-spiritual-800 rounded-3xl p-8 text-white shadow-xl relative overflow-hidden">
                  <h1 className="font-serif text-3xl font-bold mb-2">Welcome to Spiritual Welfare</h1>
-                 <p className="text-spiritual-100">Explore over 500 features for your soul.</p>
+                 <p className="text-spiritual-100">Your digital sanctuary for Gospel, Worship, and Truth.</p>
              </div>
              
              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
@@ -839,29 +790,26 @@ const Dashboard = ({ onViewChange }: { onViewChange: (view: ViewState) => void }
     );
 };
 
-// ... Include other components (Journal, Settings, etc.) from previous version or minimal stubs ...
-// Re-using simplified versions of previous components to fit context
-const Journal = () => <div className="p-8 bg-white rounded-2xl text-center"><PenTool className="w-16 h-16 mx-auto mb-4 text-spiritual-300"/><h2 className="text-2xl font-serif">Journal Feature Active</h2></div>;
-const Meditation = () => <div className="p-8 bg-white rounded-2xl text-center"><Wind className="w-16 h-16 mx-auto mb-4 text-green-300"/><h2 className="text-2xl font-serif">Meditation Active</h2></div>;
-const DreamInterpreter = () => <div className="p-8 bg-white rounded-2xl text-center"><CloudMoon className="w-16 h-16 mx-auto mb-4 text-indigo-300"/><h2 className="text-2xl font-serif">Dream Interpreter Active</h2></div>;
-const SettingsView = () => <div className="p-8 bg-white rounded-2xl text-center"><Settings className="w-16 h-16 mx-auto mb-4 text-gray-300"/><h2 className="text-2xl font-serif">Settings Active</h2></div>;
-const PrayerWall = () => <div className="p-8 bg-white rounded-2xl text-center"><Zap className="w-16 h-16 mx-auto mb-4 text-yellow-300"/><h2 className="text-2xl font-serif">Prayer Wall Active</h2></div>;
-
-// 9. Updated Gospel TV (Connects to Global Player)
+// 10. Gospel TV (Connects to Global Player)
 const GospelTV = ({ setMedia }: { setMedia: (m: MediaItem) => void }) => {
     const channels = [
         { name: "Gospel Worship 24/7", vidId: "M2CC6g3O4iI" }, 
         { name: "Hillsong Worship", vidId: "a3aF2n6bV0c" }, 
         { name: "Elevation Worship", vidId: "Zp6aygmvzM4" }, 
         { name: "Black Gospel Hits", vidId: "Q71t8lT8BvI" },
-        // ... (add all 50 channels from previous list here)
+        { name: "Instrumental Prayer", vidId: "s7j6e1g5d8w" },
+        { name: "Gaither Music", vidId: "tC3SWA1pE_k" },
+        { name: "Tasha Cobbs Leonard", vidId: "L8fD-s4a7aQ" },
+        { name: "Maverick City", vidId: "N1o8t6vD8_c" },
+        { name: "Bethel Music", vidId: "gn5CMSSAx_c" },
+        { name: "Upper Room", vidId: "j4mR1v_r2F4" },
     ];
 
     return (
         <div className="bg-white rounded-2xl shadow-sm border border-spiritual-100 p-6 h-full flex flex-col">
              <h2 className="font-serif text-2xl font-bold mb-4 flex items-center gap-2"><Tv className="w-6 h-6 text-red-500"/> Live Gospel TV</h2>
              <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-4 overflow-y-auto">
-                 {channels.slice(0, 10).map((c, i) => (
+                 {channels.map((c, i) => (
                      <button key={i} onClick={() => setMedia({ id: String(i), title: c.name, type: 'video', url: c.vidId })} className="aspect-video bg-gray-100 rounded-lg relative group overflow-hidden">
                          <img src={`https://img.youtube.com/vi/${c.vidId}/mqdefault.jpg`} className="w-full h-full object-cover group-hover:scale-110 transition-transform"/>
                          <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
@@ -875,13 +823,15 @@ const GospelTV = ({ setMedia }: { setMedia: (m: MediaItem) => void }) => {
     );
 };
 
-// 10. Updated Worship (Connects to Global Player)
+// 11. Worship (Connects to Global Player)
 const Worship = ({ setMedia }: { setMedia: (m: MediaItem) => void }) => {
     const songs = [
         { id: "1", title: "Oceans (Hillsong)", vidId: "OP-00EwLdiU" },
         { id: "2", title: "Way Maker", vidId: "iJCV_2H9xD0" },
         { id: "3", title: "10,000 Reasons", vidId: "DXDGE_lRI0E" },
         { id: "4", title: "Goodness of God", vidId: "-f4MUUMwmV4" },
+        { id: "5", title: "Jireh", vidId: "mC-zbMKp6fo" },
+        { id: "6", title: "What A Beautiful Name", vidId: "nQWFzMvCfLE" },
     ];
     
     return (
@@ -904,7 +854,11 @@ const Worship = ({ setMedia }: { setMedia: (m: MediaItem) => void }) => {
     );
 };
 
-// 11. Login Screen
+const Journal = () => <div className="p-8 bg-white rounded-2xl text-center"><PenTool className="w-16 h-16 mx-auto mb-4 text-spiritual-300"/><h2 className="text-2xl font-serif">Journal Feature</h2><p>Coming Soon: Write your daily prayers.</p></div>;
+const Meditation = () => <div className="p-8 bg-white rounded-2xl text-center"><Wind className="w-16 h-16 mx-auto mb-4 text-green-300"/><h2 className="text-2xl font-serif">Breathing</h2><p>Inhale Peace, Exhale Worry.</p></div>;
+const PrayerWall = () => <div className="p-8 bg-white rounded-2xl text-center"><Zap className="w-16 h-16 mx-auto mb-4 text-yellow-300"/><h2 className="text-2xl font-serif">Prayer Wall</h2><p>Post your requests here.</p></div>;
+
+// 12. Login Screen
 const LoginScreen = ({ onLogin }: { onLogin: () => void }) => {
     return (
         <div className="min-h-screen bg-gradient-to-br from-spiritual-600 to-spiritual-900 flex items-center justify-center p-4">
@@ -916,7 +870,7 @@ const LoginScreen = ({ onLogin }: { onLogin: () => void }) => {
                     </div>
                     <h2 className="text-3xl font-bold text-gray-800 mb-4">Your Journey Begins Here</h2>
                     <p className="text-gray-500 mb-8 leading-relaxed">
-                        Join our community to access 500+ features including AI counseling, meditation tools, live bible study, and personal journaling.
+                        Join our community to access features including live bible study, worship, fellowship, and personal journaling.
                     </p>
                 </div>
                 <div className="md:w-1/2 p-12 flex flex-col justify-center bg-white">
@@ -935,48 +889,13 @@ const LoginScreen = ({ onLogin }: { onLogin: () => void }) => {
     );
 };
 
-// 12. Main App
+// 13. Main App
 const App = () => {
   const [activeView, setActiveView] = useState<ViewState>('home');
   const [mobileOpen, setMobileOpen] = useState(false);
   const [user, setUser] = useState<FirebaseUser | null>(null);
   const [loadingAuth, setLoadingAuth] = useState(true);
   const [currentMedia, setCurrentMedia] = useState<MediaItem | null>(null);
-
-  // AI Counselor Component (Embedded)
-  const SpiritualChat = () => {
-      const [msgs, setMsgs] = useState<Message[]>([{id:'1', role:'model', text:"Peace be with you.", timestamp: new Date()}]);
-      const [inp, setInp] = useState("");
-      
-      const send = async () => {
-          if(!inp) return;
-          const newMsg: Message = {id: Date.now().toString(), role:'user', text:inp, timestamp: new Date()};
-          setMsgs(prev => [...prev, newMsg]);
-          setInp("");
-          try {
-              const ai = new GoogleGenAI({apiKey: process.env.API_KEY});
-              const res = await ai.models.generateContent({ model: 'gemini-2.5-flash', contents: inp });
-              setMsgs(prev => [...prev, {id: Date.now().toString(), role:'model', text: res.text || "...", timestamp: new Date()}]);
-          } catch(e) {
-              setMsgs(prev => [...prev, {id: Date.now().toString(), role:'model', text: generateOfflineResponse(newMsg.text), timestamp: new Date()}]);
-          }
-      }
-      return (
-        <div className="bg-white rounded-2xl h-full flex flex-col border border-spiritual-100 shadow-sm">
-             <div className="flex-1 p-4 overflow-y-auto space-y-4">
-                 {msgs.map(m => (
-                     <div key={m.id} className={`flex ${m.role==='user'?'justify-end':'justify-start'}`}>
-                         <div className={`p-3 rounded-xl max-w-[80%] ${m.role==='user'?'bg-spiritual-600 text-white':'bg-gray-100 text-gray-800'}`}>{m.text}</div>
-                     </div>
-                 ))}
-             </div>
-             <div className="p-4 border-t border-gray-100 flex gap-2">
-                 <input className="flex-1 p-2 border rounded-full px-4" value={inp} onChange={e=>setInp(e.target.value)} onKeyDown={e=>e.key==='Enter'&&send()} placeholder="Ask for guidance..."/>
-                 <button onClick={send} className="bg-spiritual-600 text-white p-2 rounded-full"><Send className="w-5 h-5"/></button>
-             </div>
-        </div>
-      )
-  };
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
@@ -1012,7 +931,7 @@ const App = () => {
   const renderContent = () => {
     switch (activeView) {
       case 'home': return <Dashboard onViewChange={setActiveView} />;
-      case 'chat': return <SpiritualChat />;
+      case 'topics': return <TopicGuide />;
       case 'community': return <CommunityChat user={user} />;
       case 'cinema': return <SpiritualCinema setMedia={setCurrentMedia} />;
       case 'mysteries': return <Mysteries />;
@@ -1021,10 +940,8 @@ const App = () => {
       case 'tv': return <GospelTV setMedia={setCurrentMedia} />;
       case 'meditate': return <Meditation />;
       case 'journal': return <Journal />;
-      case 'dreams': return <DreamInterpreter />;
       case 'prayers': return <PrayerWall />;
       case 'about': return <CreatorProfile />;
-      case 'settings': return <SettingsView />;
       default: return <Dashboard onViewChange={setActiveView} />;
     }
   };
