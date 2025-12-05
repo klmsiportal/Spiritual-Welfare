@@ -333,7 +333,7 @@ const CommunityChat = ({ user }: { user: FirebaseUser }) => {
         const q = query(
             collection(db, "chat_messages"), 
             orderBy("createdAt", "desc"), 
-            limit(500) // Increased limit to show more history
+            limit(1000) // Increased limit to show more history
         );
         
         const unsubscribe = onSnapshot(q, (snapshot) => {
