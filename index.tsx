@@ -448,15 +448,28 @@ const CommunityChat = ({ user }: { user: FirebaseUser }) => {
 
 // 4. Creator Profile Component
 const CreatorProfile = () => {
-    // Placeholder image that can be replaced by user upload. 
-    // Since I cannot read local files from prompt, we start with a generic silhouette or placeholder
-    const [image, setImage] = useState<string>("https://cdn.pixabay.com/photo/2015/10/05/22/37/blank-profile-picture-973460_1280.png");
+    // Use localStorage to persist the photo
+    const [image, setImage] = useState<string>(() => {
+        try {
+            return localStorage.getItem("creator_profile_pic") || "https://cdn.pixabay.com/photo/2015/10/05/22/37/blank-profile-picture-973460_1280.png";
+        } catch {
+            return "https://cdn.pixabay.com/photo/2015/10/05/22/37/blank-profile-picture-973460_1280.png";
+        }
+    });
 
     const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
         if (e.target.files && e.target.files[0]) {
             const reader = new FileReader();
             reader.onload = (ev) => {
-                if (ev.target?.result) setImage(ev.target.result as string);
+                if (ev.target?.result) {
+                    const result = ev.target.result as string;
+                    setImage(result);
+                    try {
+                        localStorage.setItem("creator_profile_pic", result);
+                    } catch (err) {
+                        console.error("Failed to save image", err);
+                    }
+                }
             };
             reader.readAsDataURL(e.target.files[0]);
         }
