@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef } from 'react';
 import { createRoot } from 'react-dom/client';
 import { 
@@ -57,7 +58,8 @@ import {
   VolumeX,
   Camera,
   Phone,
-  Mail
+  Mail,
+  BadgeCheck
 } from 'lucide-react';
 import { initializeApp } from "firebase/app";
 import { getAuth, signInWithPopup, GoogleAuthProvider, onAuthStateChanged, signOut, User as FirebaseUser } from "firebase/auth";
@@ -124,6 +126,8 @@ const AMBIENT_TRACKS = [
     { id: 'rain2', title: 'Thunder & Rain', url: 'https://cdn.pixabay.com/download/audio/2022/07/04/audio_9075775960.mp3' },
     { id: 'pads', title: 'Worship Pads Audio', url: 'https://cdn.pixabay.com/download/audio/2024/02/07/audio_c3e031a54f.mp3' },
     { id: 'pads2', title: 'Deep Ambient Pad', url: 'https://cdn.pixabay.com/download/audio/2023/09/06/audio_2d82d44445.mp3' },
+    { id: 'pads3', title: 'Heavenly Atmosphere', url: 'https://cdn.pixabay.com/download/audio/2022/10/25/audio_106720d2c6.mp3' },
+    { id: 'pads4', title: 'Spirit Flow', url: 'https://cdn.pixabay.com/download/audio/2022/03/09/audio_824f115598.mp3' },
 ];
 
 // --- Components ---
@@ -485,7 +489,10 @@ const CreatorProfile = () => {
                         <div className="flex-1 pt-4 md:pt-16">
                             <div className="flex justify-between items-start">
                                 <div>
-                                    <h1 className="text-3xl font-bold text-gray-900 font-serif">Akin S. Sokpah</h1>
+                                    <h1 className="text-3xl font-bold text-gray-900 font-serif flex items-center gap-2">
+                                        Akin S. Sokpah
+                                        <BadgeCheck className="w-6 h-6 text-blue-500 fill-current" />
+                                    </h1>
                                     <p className="text-spiritual-600 font-medium flex items-center gap-1">
                                         <MapPin className="w-4 h-4"/> Liberia, West Africa
                                     </p>
@@ -500,11 +507,11 @@ const CreatorProfile = () => {
                             <div className="mt-6 space-y-2">
                                 <div className="flex items-center gap-3 text-gray-700 bg-gray-50 p-3 rounded-lg border border-gray-100">
                                     <Phone className="w-5 h-5 text-spiritual-500" />
-                                    <span className="font-semibold">+231 88 918 3557</span>
+                                    <a href="tel:+231889183557" className="font-semibold hover:text-spiritual-600">+231 88 918 3557</a>
                                 </div>
                                 <div className="flex items-center gap-3 text-gray-700 bg-gray-50 p-3 rounded-lg border border-gray-100">
                                     <Mail className="w-5 h-5 text-spiritual-500" />
-                                    <span className="font-semibold">sokpahakinsaye@gmail.com</span>
+                                    <a href="mailto:sokpahakinsaye@gmail.com" className="font-semibold hover:text-spiritual-600">sokpahakinsaye@gmail.com</a>
                                 </div>
                                 <a 
                                     href="https://www.facebook.com/profile.php?id=61583456361691" 
@@ -784,11 +791,22 @@ const Dashboard = ({ onViewChange }: { onViewChange: (view: ViewState) => void }
         { id: 'about', title: 'About Creator', desc: 'Akin S. Sokpah', icon: <User className="w-6 h-6 text-cyan-500" />, color: 'bg-cyan-50' },
     ];
 
+    const copyLink = () => {
+        navigator.clipboard.writeText("https://spiritual-welfare.vercel.app/");
+        alert("Link copied! Share it on WhatsApp or Facebook.");
+    };
+
     return (
         <div className="space-y-6 animate-in fade-in duration-500 pb-20">
              <div className="bg-gradient-to-r from-spiritual-600 to-spiritual-800 rounded-3xl p-8 text-white shadow-xl relative overflow-hidden">
-                 <h1 className="font-serif text-3xl font-bold mb-2">Welcome to Spiritual Welfare</h1>
-                 <p className="text-spiritual-100">Your digital sanctuary for Gospel, Worship, and Truth.</p>
+                 <div className="relative z-10">
+                     <h1 className="font-serif text-3xl font-bold mb-2">Welcome to Spiritual Welfare</h1>
+                     <p className="text-spiritual-100 mb-4">Your digital sanctuary for Gospel, Worship, and Truth.</p>
+                     <button onClick={copyLink} className="bg-white/10 hover:bg-white/20 backdrop-blur border border-white/20 text-white px-4 py-2 rounded-full text-sm font-bold flex items-center gap-2 transition-all">
+                        <Share2 className="w-4 h-4"/> Share App
+                     </button>
+                 </div>
+                 <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full -translate-y-1/2 translate-x-1/2 blur-3xl"></div>
              </div>
              
              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
