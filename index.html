@@ -2,7 +2,7 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
     
     <!-- Google Search Verification -->
     <meta name="google-site-verification" content="B0NGxJe9zbA4MTu9BN2qoHp8dm1AmiDGsVHSm9INTDM" />
@@ -10,6 +10,12 @@
     <!-- PWA Manifest -->
     <link rel="manifest" href="/manifest.json" />
     <meta name="theme-color" content="#4379b7" />
+    
+    <!-- iOS / Apple PWA Support -->
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Spiritual">
+    <link rel="apple-touch-icon" href="https://cdn.pixabay.com/photo/2018/01/18/12/28/bible-3090547_1280.jpg">
     
     <!-- SEO Indexing (Crucial for Search Results) -->
     <meta name="robots" content="index, follow" />
@@ -100,6 +106,7 @@
     <style>
       body {
         background-color: #f4f7fb;
+        overscroll-behavior-y: none; /* Prevent bounce effect on iOS */
       }
       .scrollbar-hide::-webkit-scrollbar {
           display: none;

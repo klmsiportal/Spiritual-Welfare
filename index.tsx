@@ -59,7 +59,8 @@ import {
   Camera,
   Phone,
   Mail,
-  BadgeCheck
+  BadgeCheck,
+  Download
 } from 'lucide-react';
 import { initializeApp } from "firebase/app";
 import { getAuth, signInWithPopup, GoogleAuthProvider, onAuthStateChanged, signOut, User as FirebaseUser } from "firebase/auth";
@@ -133,7 +134,7 @@ const AMBIENT_TRACKS = [
 // --- Components ---
 
 // 1. Sidebar
-const Sidebar = ({ activeView, onViewChange, mobileOpen, setMobileOpen, user, onSignOut, onPlayAmbient }: any) => {
+const Sidebar = ({ activeView, onViewChange, mobileOpen, setMobileOpen, user, onSignOut, onPlayAmbient, installAction, canInstall }: any) => {
   const menuItems = [
     { id: 'home', label: 'Dashboard', icon: <Heart className="w-5 h-5" /> },
     { id: 'bible', label: 'Holy Bible', icon: <BookOpen className="w-5 h-5" /> },
@@ -212,6 +213,16 @@ const Sidebar = ({ activeView, onViewChange, mobileOpen, setMobileOpen, user, on
               <span className="text-sm">{item.label}</span>
             </button>
           ))}
+          
+          {canInstall && (
+              <button 
+                  onClick={installAction}
+                  className="w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 text-blue-600 bg-blue-50 hover:bg-blue-100 font-bold mt-4"
+              >
+                  <Download className="w-5 h-5" />
+                  <span className="text-sm">Install App</span>
+              </button>
+          )}
         </nav>
 
         <div className="p-6 border-t border-spiritual-100 bg-spiritual-50/50 absolute bottom-0 w-full bg-white">
@@ -343,7 +354,8 @@ const CommunityChat = ({ user }: { user: FirebaseUser }) => {
         const unsubscribe = onSnapshot(q, (snapshot) => {
             const msgs: ChatMessage[] = [];
             snapshot.forEach((doc) => {
-                msgs.push({ id: doc.id, ...doc.data() } as ChatMessage);
+                const data = doc.data();
+                msgs.push({ id: doc.id, ...data } as ChatMessage);
             });
             // Firestore returns newest first (desc), so reverse for chat view (oldest at top)
             setMessages(msgs.reverse());
@@ -380,7 +392,11 @@ const CommunityChat = ({ user }: { user: FirebaseUser }) => {
 
     const formatTime = (timestamp: any) => {
         if (!timestamp) return '';
-        if (timestamp.toDate) return timestamp.toDate().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+        try {
+            if (timestamp.toDate) return timestamp.toDate().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+        } catch (e) {
+            return '';
+        }
         return '';
     };
 
@@ -949,13 +965,28 @@ const App = () => {
   const [user, setUser] = useState<FirebaseUser | null>(null);
   const [loadingAuth, setLoadingAuth] = useState(true);
   const [currentMedia, setCurrentMedia] = useState<MediaItem | null>(null);
+  
+  // PWA Install State
+  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
         setUser(currentUser);
         setLoadingAuth(false);
     });
-    return () => unsubscribe();
+
+    // PWA Install Handler
+    const handleBeforeInstallPrompt = (e: any) => {
+        e.preventDefault();
+        setDeferredPrompt(e);
+    };
+
+    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+
+    return () => {
+        unsubscribe();
+        window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+    };
   }, []);
 
   const handleGoogleLogin = async () => {
@@ -967,6 +998,15 @@ const App = () => {
   };
 
   const handleSignOut = () => signOut(auth);
+
+  const handleInstallClick = async () => {
+      if (!deferredPrompt) return;
+      deferredPrompt.prompt();
+      const { outcome } = await deferredPrompt.userChoice;
+      if (outcome === 'accepted') {
+          setDeferredPrompt(null);
+      }
+  };
 
   // Load Ambient Track
   const playAmbient = (track: any) => {
@@ -1009,6 +1049,8 @@ const App = () => {
         user={user}
         onSignOut={handleSignOut}
         onPlayAmbient={playAmbient}
+        installAction={handleInstallClick}
+        canInstall={!!deferredPrompt}
       />
 
       <main className="flex-1 flex flex-col min-w-0 relative h-full">
