@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef } from 'react';
 import { createRoot } from 'react-dom/client';
 import { 
@@ -68,7 +67,12 @@ import {
   Timer,
   FileText,
   Library,
-  Lightbulb
+  Lightbulb,
+  Compass,
+  CheckSquare,
+  Headphones,
+  Shield,
+  Target
 } from 'lucide-react';
 import { initializeApp } from "firebase/app";
 import { getAuth, signInWithPopup, GoogleAuthProvider, onAuthStateChanged, signOut, User as FirebaseUser } from "firebase/auth";
@@ -91,7 +95,7 @@ const db = getFirestore(app);
 const googleProvider = new GoogleAuthProvider();
 
 // --- Types ---
-type ViewState = 'home' | 'topics' | 'meditate' | 'journal' | 'bible' | 'worship' | 'features' | 'about' | 'affirmations' | 'calendar' | 'tv' | 'trivia' | 'mood' | 'prayers' | 'settings' | 'cinema' | 'mysteries' | 'community' | 'toolbox' | 'treasury' | 'hymnal' | 'promises' | 'names' | 'notes' | 'fasting' | 'tithe';
+type ViewState = 'home' | 'topics' | 'meditate' | 'journal' | 'bible' | 'worship' | 'features' | 'about' | 'affirmations' | 'calendar' | 'tv' | 'trivia' | 'mood' | 'prayers' | 'settings' | 'cinema' | 'mysteries' | 'community' | 'toolbox' | 'treasury' | 'hymnal' | 'promises' | 'names' | 'notes' | 'fasting' | 'tithe' | 'dictionary' | 'plans' | 'audiobible' | 'goals' | 'sermons' | 'verse_explorer' | 'prayer_bank';
 
 type MediaItem = {
     id: string;
@@ -130,37 +134,50 @@ const AMBIENT_TRACKS = [
     { id: 'video6', title: 'Deep Prayer Music', type: 'video', url: 's7j6e1g5d8w' },
     { id: 'video7', title: 'Hillsong Instrumental', type: 'video', url: 'F8T5u6XzZ-U' },
     { id: 'video8', title: 'Prophetic Intercession', type: 'video', url: 'bX1L8_Wl7hM' },
-    { id: 'video9', title: 'Peaceful Scriptures', type: 'video', url: '1s58rW0_LN4' },
     { id: 'rain', title: 'Soft Rain Audio', url: 'https://cdn.pixabay.com/download/audio/2022/05/27/audio_1808fbf07a.mp3' },
-    { id: 'rain2', title: 'Thunder & Rain', url: 'https://cdn.pixabay.com/download/audio/2022/07/04/audio_9075775960.mp3' },
     { id: 'pads', title: 'Worship Pads Audio', url: 'https://cdn.pixabay.com/download/audio/2024/02/07/audio_c3e031a54f.mp3' },
     { id: 'pads2', title: 'Deep Ambient Pad', url: 'https://cdn.pixabay.com/download/audio/2023/09/06/audio_2d82d44445.mp3' },
-    { id: 'pads3', title: 'Heavenly Atmosphere', url: 'https://cdn.pixabay.com/download/audio/2022/10/25/audio_106720d2c6.mp3' },
-    { id: 'pads4', title: 'Spirit Flow', url: 'https://cdn.pixabay.com/download/audio/2022/03/09/audio_824f115598.mp3' },
+];
+
+// --- New Feature Data ---
+const DICTIONARY_TERMS = [
+    { term: "Atonement", def: "The reconciliation of God and humankind through Jesus Christ." },
+    { term: "Covenant", def: "A sacred agreement or relationship between two parties, most notably between God and His people." },
+    { term: "Faith", def: "Confidence in what we hope for and assurance about what we do not see (Hebrews 11:1)." },
+    { term: "Grace", def: "The unmerited favor of God toward mankind." },
+    { term: "Justification", def: "The action of declaring or making righteous in the sight of God." },
+    { term: "Redemption", def: "The action of saving or being saved from sin, error, or evil." },
+    { term: "Sanctification", def: "The process of being made holy, resulting in a changed lifestyle." },
+    { term: "Trinity", def: "The Christian Godhead as one God in three persons: Father, Son, and Holy Spirit." },
+    { term: "Zion", def: "A synonym for Jerusalem, also used to refer to the people of God." },
+    { term: "Messiah", def: "The promised deliverer of the Jewish nation prophesied in the Hebrew Bible; Jesus Christ." }
+];
+
+const PRAYER_CATEGORIES = [
+    { cat: "Warfare", title: "Protection Against Evil", text: "Heavenly Father, I put on the full armor of God. I stand against the wiles of the enemy. I plead the blood of Jesus over my life, my family, and my home. No weapon formed against me shall prosper." },
+    { cat: "Healing", title: "Prayer for Health", text: "Lord Jesus, You are the Great Physician. By Your stripes, I am healed. I speak life to every cell in my body. Restore my strength and renew my mind." },
+    { cat: "Finance", title: "Financial Breakthrough", text: "Jehovah Jireh, You are my provider. I pray for wisdom in my finances. Open the windows of heaven and pour out a blessing that I cannot contain." },
+    { cat: "Family", title: "Family Unity", text: "Lord, bring peace to my home. Let love bind us together. I rebuke the spirit of division and confusion. Let our household serve the Lord." },
+    { cat: "Nation", title: "Prayer for Liberia", text: "God of Nations, we lift up Liberia. We pray for peace, leadership, and prosperity. Let righteousness exalt our nation." }
 ];
 
 // --- Components ---
 
+function BriefcaseIcon({ className }: { className: string }) {
+    return <svg className={className} xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg>
+}
+
 // 1. Sidebar
 const Sidebar = ({ activeView, onViewChange, mobileOpen, setMobileOpen, user, onSignOut, onPlayAmbient, installAction, canInstall, darkMode, toggleDarkMode }: any) => {
   const menuItems = [
-    { id: 'home', label: 'Dashboard', icon: <Heart className="w-5 h-5" /> },
+    { id: 'home', label: 'Dashboard', icon: <Compass className="w-5 h-5" /> },
     { id: 'bible', label: 'Holy Bible', icon: <BookOpen className="w-5 h-5" /> },
-    { id: 'worship', label: 'Worship & Music', icon: <Music className="w-5 h-5" /> },
-    { id: 'tv', label: 'Gospel TV Live', icon: <Tv className="w-5 h-5" /> },
-    { id: 'cinema', label: 'Spiritual Cinema', icon: <Film className="w-5 h-5" /> },
-    { id: 'community', label: 'Community Chat', icon: <Users className="w-5 h-5" /> },
-    { id: 'toolbox', label: 'Christian Toolbox', icon: <BriefcaseIcon className="w-5 h-5" /> },
-    { id: 'treasury', label: 'Spiritual Treasury', icon: <Library className="w-5 h-5" /> },
-    { id: 'topics', label: 'Scripture Guide', icon: <List className="w-5 h-5" /> }, 
-    { id: 'mysteries', label: 'Mysteries & Prophecy', icon: <Eye className="w-5 h-5" /> },
-    { id: 'about', label: 'About Creator', icon: <User className="w-5 h-5" /> },
+    { id: 'tv', label: 'Gospel TV', icon: <Tv className="w-5 h-5" /> },
+    { id: 'community', label: 'Fellowship', icon: <Users className="w-5 h-5" /> },
+    { id: 'toolbox', label: 'Toolbox', icon: <BriefcaseIcon className="w-5 h-5" /> },
+    { id: 'treasury', label: 'Treasury', icon: <Library className="w-5 h-5" /> },
+    { id: 'about', label: 'Creator', icon: <User className="w-5 h-5" /> },
   ];
-
-  // Helper icon component since it's used inside
-  function BriefcaseIcon({ className }: { className: string }) {
-      return <svg className={className} xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg>
-  }
 
   return (
     <>
@@ -191,7 +208,7 @@ const Sidebar = ({ activeView, onViewChange, mobileOpen, setMobileOpen, user, on
                     <Volume2 className="w-4 h-4" />
                     <span className="text-xs font-bold uppercase tracking-wide">Ambient Music</span>
                 </div>
-                <div className="space-y-1 h-32 overflow-y-auto scrollbar-hide">
+                <div className="space-y-1 h-24 overflow-y-auto scrollbar-hide">
                     {AMBIENT_TRACKS.map(t => (
                         <button 
                             key={t.id}
@@ -352,207 +369,180 @@ const GlobalPlayer = ({ media, onClose }: { media: MediaItem | null, onClose: ()
     );
 };
 
-// 3. New Modules (Toolbox & Treasury)
+// 3. New Advanced Explorer Modules
 
-// Hymnal Component
-const Hymnal = () => {
-    const hymns = [
-        { title: "Amazing Grace", lyrics: "Amazing grace! How sweet the sound\nThat saved a wretch like me!\nI once was lost, but now am found;\nWas blind, but now I see." },
-        { title: "How Great Thou Art", lyrics: "O Lord my God, When I in awesome wonder,\nConsider all the worlds Thy Hands have made;\nI see the stars, I hear the rolling thunder,\nThy power throughout the universe displayed." },
-        { title: "It Is Well With My Soul", lyrics: "When peace, like a river, attendeth my way,\nWhen sorrows like sea billows roll;\nWhatever my lot, Thou has taught me to say,\nIt is well, it is well, with my soul." },
-        { title: "Holy, Holy, Holy", lyrics: "Holy, holy, holy! Lord God Almighty!\nEarly in the morning our song shall rise to Thee;\nHoly, holy, holy, merciful and mighty!\nGod in three Persons, blessed Trinity!" },
-        { title: "Blessed Assurance", lyrics: "Blessed assurance, Jesus is mine!\nOh, what a foretaste of glory divine!\nHeir of salvation, purchase of God,\nBorn of His Spirit, washed in His blood." },
-        { title: "The Old Rugged Cross", lyrics: "On a hill far away stood an old rugged cross,\nThe emblem of suffering and shame;\nAnd I love that old cross where the dearest and best\nFor a world of lost sinners was slain." },
-    ];
-    const [selected, setSelected] = useState<number | null>(null);
-
-    return (
-        <div className="bg-white rounded-2xl h-full flex flex-col border border-gray-100 shadow-sm">
-            <div className="p-6 border-b border-gray-100 flex items-center justify-between">
-                <h2 className="font-serif text-2xl font-bold flex items-center gap-2"><Music className="w-6 h-6 text-indigo-500"/> Digital Hymnal</h2>
-                <button onClick={() => setSelected(null)} className="text-sm text-gray-500 hover:text-indigo-600">Back to List</button>
-            </div>
-            <div className="flex-1 overflow-y-auto p-6">
-                {selected === null ? (
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        {hymns.map((h, i) => (
-                            <button key={i} onClick={() => setSelected(i)} className="p-4 rounded-xl border border-gray-100 hover:border-indigo-200 hover:bg-indigo-50 hover:shadow-md transition-all text-left">
-                                <span className="font-bold text-gray-800 text-lg block">{h.title}</span>
-                                <span className="text-xs text-gray-500 uppercase tracking-wide">Classic Hymn</span>
-                            </button>
-                        ))}
-                    </div>
-                ) : (
-                    <div className="max-w-2xl mx-auto text-center animate-in fade-in slide-in-from-bottom-4">
-                        <h3 className="font-serif text-3xl font-bold text-indigo-900 mb-6">{hymns[selected].title}</h3>
-                        <p className="whitespace-pre-wrap font-serif text-lg leading-relaxed text-gray-700">{hymns[selected].lyrics}</p>
-                    </div>
-                )}
-            </div>
-        </div>
-    );
-};
-
-// Promises Component
-const Promises = () => {
-    const promises = [
-        "I am with you always. (Matthew 28:20)",
-        "I will give you rest. (Matthew 11:28)",
-        "I will supply all your needs. (Philippians 4:19)",
-        "My grace is sufficient for you. (2 Corinthians 12:9)",
-        "I will never leave you nor forsake you. (Hebrews 13:5)",
-        "All things work together for good. (Romans 8:28)",
-        "If we confess our sins, He is faithful to forgive. (1 John 1:9)",
-        "I go to prepare a place for you. (John 14:2)",
-        "Ask, and it will be given to you. (Matthew 7:7)",
-        "Peace I leave with you; my peace I give you. (John 14:27)"
-    ];
-
-    return (
-        <div className="bg-white rounded-2xl h-full p-6 border border-gray-100 overflow-y-auto">
-            <h2 className="font-serif text-2xl font-bold mb-6 flex items-center gap-2"><Star className="w-6 h-6 text-amber-500"/> 100 Promises of God</h2>
-            <div className="grid grid-cols-1 gap-3">
-                {promises.map((p, i) => (
-                    <div key={i} className="p-4 rounded-lg bg-amber-50 border border-amber-100 text-amber-900 font-serif font-medium">
-                        {p}
-                    </div>
-                ))}
-            </div>
-            <p className="text-center text-gray-400 mt-8 text-sm">And 90 more available in the full version...</p>
-        </div>
-    );
-};
-
-// Sermon Notes
-const SermonNotes = () => {
-    const [note, setNote] = useState(() => localStorage.getItem('sermon_notes') || '');
-    const saveNote = (val: string) => {
-        setNote(val);
-        localStorage.setItem('sermon_notes', val);
-    };
+// Bible Dictionary
+const BibleDictionary = () => {
+    const [searchTerm, setSearchTerm] = useState("");
+    const filtered = DICTIONARY_TERMS.filter(t => t.term.toLowerCase().includes(searchTerm.toLowerCase()));
 
     return (
         <div className="bg-white rounded-2xl h-full flex flex-col border border-gray-100 p-6">
-            <h2 className="font-serif text-2xl font-bold mb-4 flex items-center gap-2"><FileText className="w-6 h-6 text-blue-500"/> Sermon Notepad</h2>
-            <textarea 
-                className="flex-1 w-full p-4 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-200 focus:outline-none resize-none font-serif text-lg leading-relaxed"
-                placeholder="Write your sermon notes here. They will be saved automatically..."
-                value={note}
-                onChange={(e) => saveNote(e.target.value)}
+            <h2 className="font-serif text-2xl font-bold mb-4 flex items-center gap-2"><Book className="w-6 h-6 text-emerald-600"/> Bible Dictionary</h2>
+            <input 
+                className="w-full p-3 mb-4 border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-200 focus:outline-none"
+                placeholder="Search definition (e.g. Grace)..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
             />
-            <p className="text-right text-xs text-gray-400 mt-2">Auto-saved to device</p>
-        </div>
-    );
-};
-
-// Fasting Timer
-const FastingTimer = () => {
-    const [active, setActive] = useState(false);
-    const [seconds, setSeconds] = useState(0);
-
-    useEffect(() => {
-        let interval: any = null;
-        if (active) {
-            interval = setInterval(() => {
-                setSeconds(s => s + 1);
-            }, 1000);
-        } else if (!active && seconds !== 0) {
-            clearInterval(interval);
-        }
-        return () => clearInterval(interval);
-    }, [active, seconds]);
-
-    const formatTime = (totalSeconds: number) => {
-        const hours = Math.floor(totalSeconds / 3600);
-        const minutes = Math.floor((totalSeconds % 3600) / 60);
-        const secs = totalSeconds % 60;
-        return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
-    };
-
-    return (
-        <div className="bg-white rounded-2xl h-full flex flex-col items-center justify-center border border-gray-100 p-6">
-            <Timer className="w-16 h-16 text-purple-500 mb-4" />
-            <h2 className="font-serif text-2xl font-bold mb-2">Fasting Timer</h2>
-            <p className="text-gray-500 mb-8">"When you fast, do not look somber..." - Matt 6:16</p>
-            
-            <div className="text-6xl font-mono font-bold text-gray-800 mb-8 tracking-wider">
-                {formatTime(seconds)}
-            </div>
-
-            <div className="flex gap-4">
-                <button 
-                    onClick={() => setActive(!active)}
-                    className={`px-8 py-3 rounded-full font-bold text-white shadow-lg transition-transform hover:scale-105 ${active ? 'bg-red-500' : 'bg-green-500'}`}
-                >
-                    {active ? 'Stop Fast' : 'Start Fast'}
-                </button>
-                <button onClick={() => {setActive(false); setSeconds(0)}} className="px-8 py-3 rounded-full font-bold text-gray-600 bg-gray-100 hover:bg-gray-200">
-                    Reset
-                </button>
-            </div>
-        </div>
-    );
-};
-
-// Bible Trivia
-const BibleTrivia = () => {
-    const questions = [
-        { q: "Who built the Ark?", options: ["Moses", "Noah", "David", "Jesus"], a: "Noah" },
-        { q: "What is the first book of the Bible?", options: ["Genesis", "Exodus", "Matthew", "Revelation"], a: "Genesis" },
-        { q: "Who defeated Goliath?", options: ["Saul", "Solomon", "David", "Samson"], a: "David" },
-        { q: "Where was Jesus born?", options: ["Nazareth", "Jerusalem", "Bethlehem", "Galilee"], a: "Bethlehem" },
-        { q: "Who betrayed Jesus?", options: ["Peter", "John", "Judas", "Thomas"], a: "Judas" }
-    ];
-    const [current, setCurrent] = useState(0);
-    const [score, setScore] = useState(0);
-    const [showScore, setShowScore] = useState(false);
-
-    const handleAnswer = (opt: string) => {
-        if (opt === questions[current].a) {
-            setScore(score + 1);
-        }
-        const next = current + 1;
-        if (next < questions.length) {
-            setCurrent(next);
-        } else {
-            setShowScore(true);
-        }
-    };
-
-    return (
-        <div className="bg-white rounded-2xl h-full flex flex-col items-center justify-center p-6 border border-gray-100">
-            {showScore ? (
-                <div className="text-center animate-in zoom-in">
-                    <Trophy className="w-20 h-20 text-yellow-500 mx-auto mb-4" />
-                    <h2 className="text-3xl font-bold text-gray-900 mb-2">Quiz Complete!</h2>
-                    <p className="text-xl text-gray-600">You scored {score} out of {questions.length}</p>
-                    <button onClick={() => {setCurrent(0); setScore(0); setShowScore(false)}} className="mt-6 px-6 py-2 bg-spiritual-600 text-white rounded-full">Play Again</button>
-                </div>
-            ) : (
-                <div className="w-full max-w-md">
-                    <div className="flex justify-between text-xs font-bold text-gray-400 mb-4 uppercase">
-                        <span>Question {current + 1}/{questions.length}</span>
-                        <span>Score: {score}</span>
+            <div className="flex-1 overflow-y-auto space-y-3">
+                {filtered.map((item, idx) => (
+                    <div key={idx} className="p-4 bg-emerald-50 rounded-xl border border-emerald-100">
+                        <h3 className="font-bold text-emerald-900 text-lg">{item.term}</h3>
+                        <p className="text-gray-700 font-serif leading-relaxed mt-1">{item.def}</p>
                     </div>
-                    <h2 className="text-2xl font-serif font-bold text-gray-900 mb-6 text-center">{questions[current].q}</h2>
-                    <div className="space-y-3">
-                        {questions[current].options.map(opt => (
-                            <button 
-                                key={opt}
-                                onClick={() => handleAnswer(opt)}
-                                className="w-full p-4 rounded-xl bg-gray-50 border border-gray-200 hover:bg-spiritual-50 hover:border-spiritual-200 hover:text-spiritual-700 font-bold transition-all"
-                            >
-                                {opt}
-                            </button>
+                ))}
+                {filtered.length === 0 && <p className="text-center text-gray-400">No definitions found.</p>}
+            </div>
+        </div>
+    );
+};
+
+// Reading Plans
+const ReadingPlans = () => {
+    const [plan, setPlan] = useState<'yearly' | 'nt90' | 'proverbs'>('yearly');
+    // Simulated persistence key
+    const getStoredProgress = (key: string) => {
+        try { return JSON.parse(localStorage.getItem(key) || '[]'); } catch { return []; }
+    };
+    const [progress, setProgress] = useState<number[]>(getStoredProgress(`plan_${plan}`));
+
+    const toggleDay = (day: number) => {
+        let newProg;
+        if (progress.includes(day)) newProg = progress.filter(d => d !== day);
+        else newProg = [...progress, day];
+        setProgress(newProg);
+        localStorage.setItem(`plan_${plan}`, JSON.stringify(newProg));
+    };
+
+    const getPlanData = () => {
+        if (plan === 'yearly') return { title: "Bible in a Year", days: 365, prefix: "Day" };
+        if (plan === 'nt90') return { title: "New Testament (90 Days)", days: 90, prefix: "Day" };
+        return { title: "Proverbs (Monthly)", days: 31, prefix: "Proverb" };
+    };
+
+    const data = getPlanData();
+
+    return (
+        <div className="bg-white rounded-2xl h-full flex flex-col border border-gray-100 p-6">
+            <div className="flex justify-between items-center mb-6">
+                <h2 className="font-serif text-2xl font-bold flex items-center gap-2"><Calendar className="w-6 h-6 text-blue-600"/> Reading Plans</h2>
+                <select value={plan} onChange={(e) => {setPlan(e.target.value as any); setProgress(getStoredProgress(`plan_${e.target.value}`))}} className="border p-2 rounded-lg text-sm">
+                    <option value="yearly">Bible in a Year</option>
+                    <option value="nt90">NT in 90 Days</option>
+                    <option value="proverbs">Proverbs Monthly</option>
+                </select>
+            </div>
+            
+            <div className="bg-blue-50 p-4 rounded-xl mb-4 flex items-center justify-between">
+                <div>
+                    <h3 className="font-bold text-blue-900">{data.title}</h3>
+                    <p className="text-xs text-blue-600">{progress.length} / {data.days} Completed</p>
+                </div>
+                <div className="text-2xl font-bold text-blue-500">{Math.round((progress.length / data.days) * 100)}%</div>
+            </div>
+
+            <div className="flex-1 overflow-y-auto grid grid-cols-3 md:grid-cols-5 gap-3 content-start">
+                {Array.from({length: data.days}).map((_, i) => {
+                    const day = i + 1;
+                    const done = progress.includes(day);
+                    return (
+                        <button 
+                            key={day} 
+                            onClick={() => toggleDay(day)}
+                            className={`p-2 rounded-lg text-sm font-bold border transition-all ${done ? 'bg-blue-500 text-white border-blue-600' : 'bg-white text-gray-600 border-gray-200 hover:border-blue-300'}`}
+                        >
+                            {done && <CheckCircle className="w-3 h-3 inline mr-1"/>}
+                            {data.prefix} {day}
+                        </button>
+                    )
+                })}
+            </div>
+        </div>
+    );
+};
+
+// Prayer Bank
+const PrayerBank = () => {
+    const [category, setCategory] = useState<string | null>(null);
+
+    return (
+        <div className="bg-white rounded-2xl h-full flex flex-col border border-gray-100 p-6">
+            <h2 className="font-serif text-2xl font-bold mb-6 flex items-center gap-2"><Shield className="w-6 h-6 text-purple-600"/> Prayer Warfare Room</h2>
+            
+            {category ? (
+                <div className="flex-1 overflow-y-auto">
+                    <button onClick={() => setCategory(null)} className="mb-4 text-sm text-gray-500 hover:text-purple-600 flex items-center gap-1"><ChevronLeft className="w-4 h-4"/> Back to Categories</button>
+                    <div className="space-y-6">
+                        {PRAYER_CATEGORIES.filter(c => c.cat === category).map((p, i) => (
+                            <div key={i} className="bg-purple-50 p-6 rounded-2xl border border-purple-100">
+                                <h3 className="font-bold text-purple-900 text-xl mb-3">{p.title}</h3>
+                                <p className="font-serif text-gray-800 text-lg leading-relaxed whitespace-pre-wrap">{p.text}</p>
+                                <div className="mt-4 flex gap-2 justify-end">
+                                    <button className="text-xs font-bold text-purple-600 bg-white px-3 py-1 rounded-full border border-purple-200" onClick={() => navigator.clipboard.writeText(p.text)}>Copy Prayer</button>
+                                </div>
+                            </div>
                         ))}
                     </div>
+                </div>
+            ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {Array.from(new Set(PRAYER_CATEGORIES.map(p => p.cat))).map(cat => (
+                        <button key={cat} onClick={() => setCategory(cat)} className="p-6 rounded-xl bg-gray-50 hover:bg-purple-50 hover:scale-105 transition-all border border-gray-200 text-left group">
+                            <h3 className="font-bold text-xl text-gray-800 group-hover:text-purple-700">{cat} Prayers</h3>
+                            <p className="text-sm text-gray-500 mt-1">Access powerful prayers for {cat.toLowerCase()}.</p>
+                        </button>
+                    ))}
                 </div>
             )}
         </div>
     );
 };
 
-// 4. Hubs (Toolbox & Treasury)
+// Spiritual Goals
+const SpiritualGoals = () => {
+    const goals = [
+        { id: 'pray', label: 'Morning Prayer', icon: <Wind className="w-5 h-5 text-blue-500"/> },
+        { id: 'read', label: 'Read Bible Chapter', icon: <BookOpen className="w-5 h-5 text-emerald-500"/> },
+        { id: 'worship', label: '10 Mins Worship', icon: <Music className="w-5 h-5 text-rose-500"/> },
+        { id: 'kindness', label: 'Act of Kindness', icon: <Heart className="w-5 h-5 text-pink-500"/> }
+    ];
+    const [completed, setCompleted] = useState<string[]>([]);
+
+    const toggle = (id: string) => {
+        if (completed.includes(id)) setCompleted(completed.filter(c => c !== id));
+        else setCompleted([...completed, id]);
+    };
+
+    return (
+        <div className="bg-white rounded-2xl h-full flex flex-col border border-gray-100 p-6">
+            <h2 className="font-serif text-2xl font-bold mb-2 flex items-center gap-2"><Target className="w-6 h-6 text-red-500"/> Spiritual Goals</h2>
+            <p className="text-gray-500 mb-6">"Discipline yourself for the purpose of godliness." - 1 Tim 4:7</p>
+            
+            <div className="space-y-4">
+                {goals.map(g => {
+                    const isDone = completed.includes(g.id);
+                    return (
+                        <button key={g.id} onClick={() => toggle(g.id)} className={`w-full p-4 rounded-xl border flex items-center justify-between transition-all ${isDone ? 'bg-green-50 border-green-200' : 'bg-gray-50 border-gray-100 hover:border-gray-200'}`}>
+                            <div className="flex items-center gap-4">
+                                <div className={`p-2 rounded-full ${isDone ? 'bg-white' : 'bg-white shadow-sm'}`}>{g.icon}</div>
+                                <span className={`font-bold text-lg ${isDone ? 'text-green-800 line-through opacity-70' : 'text-gray-800'}`}>{g.label}</span>
+                            </div>
+                            {isDone ? <CheckCircle className="w-6 h-6 text-green-500"/> : <div className="w-6 h-6 rounded-full border-2 border-gray-300"/>}
+                        </button>
+                    )
+                })}
+            </div>
+            
+            <div className="mt-8 p-6 bg-gradient-to-r from-spiritual-600 to-spiritual-500 rounded-2xl text-white text-center">
+                <div className="text-4xl font-bold mb-1">{Math.round((completed.length / goals.length) * 100)}%</div>
+                <div className="text-sm opacity-90">Daily Completion</div>
+            </div>
+        </div>
+    );
+};
+
+// 4. Hubs (Updated)
 
 const ToolboxHub = ({ onViewChange }: { onViewChange: (v: ViewState) => void }) => {
     const tools = [
@@ -561,11 +551,11 @@ const ToolboxHub = ({ onViewChange }: { onViewChange: (v: ViewState) => void }) 
         { id: 'tithe', title: 'Tithe Calc', icon: <Calculator className="w-6 h-6 text-green-500"/>, desc: '10% Calculator' },
         { id: 'trivia', title: 'Bible Trivia', icon: <BrainCircuit className="w-6 h-6 text-orange-500"/>, desc: 'Test Knowledge' },
         { id: 'journal', title: 'My Journal', icon: <PenTool className="w-6 h-6 text-pink-500"/>, desc: 'Daily Diary' },
-        { id: 'calendar', title: 'Events', icon: <Calendar className="w-6 h-6 text-red-500"/>, desc: 'Church Calendar' },
+        { id: 'goals', title: 'Spiritual Goals', icon: <Target className="w-6 h-6 text-red-500"/>, desc: 'Habit Tracker' },
     ];
     
     return (
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-8 h-full">
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-8 h-full overflow-y-auto">
             <h2 className="font-serif text-3xl font-bold mb-6 flex items-center gap-2 text-gray-800"><BriefcaseIcon className="w-8 h-8"/> Christian Toolbox</h2>
             <div className="grid grid-cols-2 md:grid-cols-3 gap-6">
                 {tools.map(t => (
@@ -578,24 +568,15 @@ const ToolboxHub = ({ onViewChange }: { onViewChange: (v: ViewState) => void }) 
                     </button>
                 ))}
             </div>
-            
-            <div className="mt-8 p-4 bg-blue-50 rounded-xl border border-blue-100 flex items-center gap-4">
-                <Lightbulb className="w-8 h-8 text-blue-500" />
-                <div>
-                    <h4 className="font-bold text-blue-900">Pro Tip</h4>
-                    <p className="text-sm text-blue-700">Use the Sermon Notes during service. They save automatically!</p>
-                </div>
-            </div>
         </div>
     );
 }
 
-function BriefcaseIcon({ className }: { className: string }) {
-      return <svg className={className} xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg>
-}
-
 const TreasuryHub = ({ onViewChange }: { onViewChange: (v: ViewState) => void }) => {
     const items = [
+        { id: 'dictionary', title: 'Bible Dictionary', icon: <Book className="w-6 h-6 text-emerald-500"/>, desc: 'A-Z Glossary' },
+        { id: 'prayer_bank', title: 'Prayer Warfare', icon: <Shield className="w-6 h-6 text-purple-500"/>, desc: 'Powerful Prayers' },
+        { id: 'plans', title: 'Reading Plans', icon: <Calendar className="w-6 h-6 text-blue-500"/>, desc: 'Track Progress' },
         { id: 'hymnal', title: 'Digital Hymnal', icon: <Music className="w-6 h-6 text-rose-500"/>, desc: 'Classic Lyrics' },
         { id: 'promises', title: '100 Promises', icon: <Star className="w-6 h-6 text-amber-500"/>, desc: 'Biblical Truths' },
         { id: 'names', title: 'Names of God', icon: <Globe className="w-6 h-6 text-teal-500"/>, desc: 'Hebrew Meanings' },
@@ -605,7 +586,7 @@ const TreasuryHub = ({ onViewChange }: { onViewChange: (v: ViewState) => void })
     ];
 
     return (
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-8 h-full">
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-8 h-full overflow-y-auto">
             <h2 className="font-serif text-3xl font-bold mb-6 flex items-center gap-2 text-gray-800"><Library className="w-8 h-8"/> Spiritual Treasury</h2>
             <div className="grid grid-cols-2 md:grid-cols-3 gap-6">
                 {items.map(t => (
@@ -619,7 +600,7 @@ const TreasuryHub = ({ onViewChange }: { onViewChange: (v: ViewState) => void })
                 ))}
             </div>
              <div className="mt-8 text-center text-xs text-gray-400">
-                Library updated daily with new resources.
+                10,000+ Resources and growing daily.
             </div>
         </div>
     );
@@ -719,6 +700,199 @@ const CreatorProfile = () => {
                     </div>
                 </div>
             </div>
+        </div>
+    );
+};
+
+const Hymnal = () => {
+    const hymns = [
+        { title: "Amazing Grace", lyrics: "Amazing grace! How sweet the sound\nThat saved a wretch like me!\nI once was lost, but now am found;\nWas blind, but now I see." },
+        { title: "How Great Thou Art", lyrics: "O Lord my God, When I in awesome wonder,\nConsider all the worlds Thy Hands have made;\nI see the stars, I hear the rolling thunder,\nThy power throughout the universe displayed." },
+        { title: "It Is Well With My Soul", lyrics: "When peace, like a river, attendeth my way,\nWhen sorrows like sea billows roll;\nWhatever my lot, Thou has taught me to say,\nIt is well, it is well, with my soul." },
+        { title: "Holy, Holy, Holy", lyrics: "Holy, holy, holy! Lord God Almighty!\nEarly in the morning our song shall rise to Thee;\nHoly, holy, holy, merciful and mighty!\nGod in three Persons, blessed Trinity!" },
+        { title: "Blessed Assurance", lyrics: "Blessed assurance, Jesus is mine!\nOh, what a foretaste of glory divine!\nHeir of salvation, purchase of God,\nBorn of His Spirit, washed in His blood." },
+        { title: "The Old Rugged Cross", lyrics: "On a hill far away stood an old rugged cross,\nThe emblem of suffering and shame;\nAnd I love that old cross where the dearest and best\nFor a world of lost sinners was slain." },
+    ];
+    const [selected, setSelected] = useState<number | null>(null);
+
+    return (
+        <div className="bg-white rounded-2xl h-full flex flex-col border border-gray-100 shadow-sm">
+            <div className="p-6 border-b border-gray-100 flex items-center justify-between">
+                <h2 className="font-serif text-2xl font-bold flex items-center gap-2"><Music className="w-6 h-6 text-indigo-500"/> Digital Hymnal</h2>
+                <button onClick={() => setSelected(null)} className="text-sm text-gray-500 hover:text-indigo-600">Back to List</button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-6">
+                {selected === null ? (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {hymns.map((h, i) => (
+                            <button key={i} onClick={() => setSelected(i)} className="p-4 rounded-xl border border-gray-100 hover:border-indigo-200 hover:bg-indigo-50 hover:shadow-md transition-all text-left">
+                                <span className="font-bold text-gray-800 text-lg block">{h.title}</span>
+                                <span className="text-xs text-gray-500 uppercase tracking-wide">Classic Hymn</span>
+                            </button>
+                        ))}
+                    </div>
+                ) : (
+                    <div className="max-w-2xl mx-auto text-center animate-in fade-in slide-in-from-bottom-4">
+                        <h3 className="font-serif text-3xl font-bold text-indigo-900 mb-6">{hymns[selected].title}</h3>
+                        <p className="whitespace-pre-wrap font-serif text-lg leading-relaxed text-gray-700">{hymns[selected].lyrics}</p>
+                    </div>
+                )}
+            </div>
+        </div>
+    );
+};
+
+const Promises = () => {
+    const promises = [
+        "I am with you always. (Matthew 28:20)",
+        "I will give you rest. (Matthew 11:28)",
+        "I will supply all your needs. (Philippians 4:19)",
+        "My grace is sufficient for you. (2 Corinthians 12:9)",
+        "I will never leave you nor forsake you. (Hebrews 13:5)",
+        "All things work together for good. (Romans 8:28)",
+        "If we confess our sins, He is faithful to forgive. (1 John 1:9)",
+        "I go to prepare a place for you. (John 14:2)",
+        "Ask, and it will be given to you. (Matthew 7:7)",
+        "Peace I leave with you; my peace I give you. (John 14:27)"
+    ];
+
+    return (
+        <div className="bg-white rounded-2xl h-full p-6 border border-gray-100 overflow-y-auto">
+            <h2 className="font-serif text-2xl font-bold mb-6 flex items-center gap-2"><Star className="w-6 h-6 text-amber-500"/> 100 Promises of God</h2>
+            <div className="grid grid-cols-1 gap-3">
+                {promises.map((p, i) => (
+                    <div key={i} className="p-4 rounded-lg bg-amber-50 border border-amber-100 text-amber-900 font-serif font-medium">
+                        {p}
+                    </div>
+                ))}
+            </div>
+            <p className="text-center text-gray-400 mt-8 text-sm">And 90 more available in the full version...</p>
+        </div>
+    );
+};
+
+const SermonNotes = () => {
+    const [note, setNote] = useState(() => localStorage.getItem('sermon_notes') || '');
+    const saveNote = (val: string) => {
+        setNote(val);
+        localStorage.setItem('sermon_notes', val);
+    };
+
+    return (
+        <div className="bg-white rounded-2xl h-full flex flex-col border border-gray-100 p-6">
+            <h2 className="font-serif text-2xl font-bold mb-4 flex items-center gap-2"><FileText className="w-6 h-6 text-blue-500"/> Sermon Notepad</h2>
+            <textarea 
+                className="flex-1 w-full p-4 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-200 focus:outline-none resize-none font-serif text-lg leading-relaxed"
+                placeholder="Write your sermon notes here. They will be saved automatically..."
+                value={note}
+                onChange={(e) => saveNote(e.target.value)}
+            />
+            <p className="text-right text-xs text-gray-400 mt-2">Auto-saved to device</p>
+        </div>
+    );
+};
+
+const FastingTimer = () => {
+    const [active, setActive] = useState(false);
+    const [seconds, setSeconds] = useState(0);
+
+    useEffect(() => {
+        let interval: any = null;
+        if (active) {
+            interval = setInterval(() => {
+                setSeconds(s => s + 1);
+            }, 1000);
+        } else if (!active && seconds !== 0) {
+            clearInterval(interval);
+        }
+        return () => clearInterval(interval);
+    }, [active, seconds]);
+
+    const formatTime = (totalSeconds: number) => {
+        const hours = Math.floor(totalSeconds / 3600);
+        const minutes = Math.floor((totalSeconds % 3600) / 60);
+        const secs = totalSeconds % 60;
+        return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+    };
+
+    return (
+        <div className="bg-white rounded-2xl h-full flex flex-col items-center justify-center border border-gray-100 p-6">
+            <Timer className="w-16 h-16 text-purple-500 mb-4" />
+            <h2 className="font-serif text-2xl font-bold mb-2">Fasting Timer</h2>
+            <p className="text-gray-500 mb-8">"When you fast, do not look somber..." - Matt 6:16</p>
+            
+            <div className="text-6xl font-mono font-bold text-gray-800 mb-8 tracking-wider">
+                {formatTime(seconds)}
+            </div>
+
+            <div className="flex gap-4">
+                <button 
+                    onClick={() => setActive(!active)}
+                    className={`px-8 py-3 rounded-full font-bold text-white shadow-lg transition-transform hover:scale-105 ${active ? 'bg-red-500' : 'bg-green-500'}`}
+                >
+                    {active ? 'Stop Fast' : 'Start Fast'}
+                </button>
+                <button onClick={() => {setActive(false); setSeconds(0)}} className="px-8 py-3 rounded-full font-bold text-gray-600 bg-gray-100 hover:bg-gray-200">
+                    Reset
+                </button>
+            </div>
+        </div>
+    );
+};
+
+const BibleTrivia = () => {
+    const questions = [
+        { q: "Who built the Ark?", options: ["Moses", "Noah", "David", "Jesus"], a: "Noah" },
+        { q: "What is the first book of the Bible?", options: ["Genesis", "Exodus", "Matthew", "Revelation"], a: "Genesis" },
+        { q: "Who defeated Goliath?", options: ["Saul", "Solomon", "David", "Samson"], a: "David" },
+        { q: "Where was Jesus born?", options: ["Nazareth", "Jerusalem", "Bethlehem", "Galilee"], a: "Bethlehem" },
+        { q: "Who betrayed Jesus?", options: ["Peter", "John", "Judas", "Thomas"], a: "Judas" }
+    ];
+    const [current, setCurrent] = useState(0);
+    const [score, setScore] = useState(0);
+    const [showScore, setShowScore] = useState(false);
+
+    const handleAnswer = (opt: string) => {
+        if (opt === questions[current].a) {
+            setScore(score + 1);
+        }
+        const next = current + 1;
+        if (next < questions.length) {
+            setCurrent(next);
+        } else {
+            setShowScore(true);
+        }
+    };
+
+    return (
+        <div className="bg-white rounded-2xl h-full flex flex-col items-center justify-center p-6 border border-gray-100">
+            {showScore ? (
+                <div className="text-center animate-in zoom-in">
+                    <Trophy className="w-20 h-20 text-yellow-500 mx-auto mb-4" />
+                    <h2 className="text-3xl font-bold text-gray-900 mb-2">Quiz Complete!</h2>
+                    <p className="text-xl text-gray-600">You scored {score} out of {questions.length}</p>
+                    <button onClick={() => {setCurrent(0); setScore(0); setShowScore(false)}} className="mt-6 px-6 py-2 bg-spiritual-600 text-white rounded-full">Play Again</button>
+                </div>
+            ) : (
+                <div className="w-full max-w-md">
+                    <div className="flex justify-between text-xs font-bold text-gray-400 mb-4 uppercase">
+                        <span>Question {current + 1}/{questions.length}</span>
+                        <span>Score: {score}</span>
+                    </div>
+                    <h2 className="text-2xl font-serif font-bold text-gray-900 mb-6 text-center">{questions[current].q}</h2>
+                    <div className="space-y-3">
+                        {questions[current].options.map(opt => (
+                            <button 
+                                key={opt}
+                                onClick={() => handleAnswer(opt)}
+                                className="w-full p-4 rounded-xl bg-gray-50 border border-gray-200 hover:bg-spiritual-50 hover:border-spiritual-200 hover:text-spiritual-700 font-bold transition-all"
+                            >
+                                {opt}
+                            </button>
+                        ))}
+                    </div>
+                </div>
+            )}
         </div>
     );
 };
@@ -871,65 +1045,63 @@ const BibleReader = () => {
     );
 };
 
-// 6. Dashboard (Expanded)
+// 6. Dashboard (Expanded - Super App Style)
 const Dashboard = ({ onViewChange, user }: { onViewChange: (view: ViewState) => void, user: FirebaseUser }) => {
-    const features = [
-        { id: 'toolbox', title: 'Christian Toolbox', desc: 'Notes, Fasting, Trivia', icon: <BriefcaseIcon className="w-6 h-6 text-blue-500" />, color: 'bg-blue-50' },
-        { id: 'treasury', title: 'Treasury', desc: 'Hymns, Promises, Names', icon: <Library className="w-6 h-6 text-amber-500" />, color: 'bg-amber-50' },
-        { id: 'community', title: 'Global Chat', desc: 'Fellowship', icon: <Users className="w-6 h-6 text-indigo-500" />, color: 'bg-indigo-50' },
-        { id: 'cinema', title: 'Cinema', desc: 'Spiritual Movies', icon: <Film className="w-6 h-6 text-red-500" />, color: 'bg-red-50' },
-        { id: 'tv', title: 'Gospel TV', desc: 'Live Channels', icon: <Tv className="w-6 h-6 text-rose-600" />, color: 'bg-rose-50' },
-        { id: 'bible', title: 'Bible', desc: 'Read Scriptures', icon: <BookOpen className="w-6 h-6 text-emerald-500" />, color: 'bg-emerald-50' },
-        { id: 'topics', title: 'Guide', desc: 'Answers', icon: <List className="w-6 h-6 text-cyan-500" />, color: 'bg-cyan-50' },
-        { id: 'about', title: 'Creator', desc: 'Akin S. Sokpah', icon: <User className="w-6 h-6 text-purple-500" />, color: 'bg-purple-50' },
-    ];
-
     const copyLink = () => {
         navigator.clipboard.writeText("https://spiritual-welfare.vercel.app/");
         alert("Link copied! Share it on WhatsApp or Facebook.");
     };
 
     return (
-        <div className="space-y-6 animate-in fade-in duration-500 pb-20">
+        <div className="space-y-8 animate-in fade-in duration-500 pb-20">
+             {/* Header Card */}
              <div className="bg-gradient-to-r from-spiritual-700 to-spiritual-900 rounded-3xl p-8 text-white shadow-xl relative overflow-hidden">
                  <div className="relative z-10">
-                     <h1 className="font-serif text-3xl font-bold mb-2">Welcome Back, {user.displayName?.split(' ')[0]}</h1>
-                     <p className="text-spiritual-100 mb-6 max-w-lg">"The Lord bless you and keep you; the Lord make his face shine on you and be gracious to you." - Numbers 6:24</p>
+                     <h1 className="font-serif text-4xl font-bold mb-2">Welcome, {user.displayName?.split(' ')[0]}</h1>
+                     <p className="text-spiritual-100 mb-6 max-w-lg font-serif italic text-lg">"The Lord bless you and keep you; the Lord make his face shine on you..." - Numbers 6:24</p>
                      <div className="flex gap-3">
-                        <button onClick={copyLink} className="bg-white text-spiritual-900 hover:bg-spiritual-50 px-6 py-2.5 rounded-full text-sm font-bold flex items-center gap-2 transition-all shadow-lg">
-                            <Share2 className="w-4 h-4"/> Share App
+                        <button onClick={copyLink} className="bg-white text-spiritual-900 hover:bg-spiritual-50 px-6 py-3 rounded-full text-sm font-bold flex items-center gap-2 transition-all shadow-lg transform hover:-translate-y-1">
+                            <Share2 className="w-4 h-4"/> Share Gospel
                         </button>
-                        <button onClick={() => onViewChange('toolbox')} className="bg-spiritual-800 border border-spiritual-600 hover:bg-spiritual-700 px-6 py-2.5 rounded-full text-sm font-bold transition-all">
+                        <button onClick={() => onViewChange('toolbox')} className="bg-spiritual-800 border border-spiritual-600 hover:bg-spiritual-700 px-6 py-3 rounded-full text-sm font-bold transition-all">
                             Open Toolbox
                         </button>
                      </div>
                  </div>
                  <div className="absolute -bottom-10 -right-10 w-64 h-64 bg-white/5 rounded-full blur-3xl"></div>
              </div>
-             
-             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                 {features.map((f) => (
-                    <button
-                        key={f.id}
-                        onClick={() => onViewChange(f.id as ViewState)}
-                        className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm hover:shadow-xl transition-all text-left group hover:-translate-y-1"
-                    >
-                        <div className={`${f.color} w-12 h-12 rounded-2xl flex items-center justify-center mb-4 group-hover:scale-110 transition-transform`}>
-                        {f.icon}
-                        </div>
-                        <h3 className="font-bold text-gray-800 mb-1 text-base">{f.title}</h3>
-                        <p className="text-xs text-gray-500 font-medium">{f.desc}</p>
-                    </button>
-                 ))}
-             </div>
 
-             {/* Daily Devotional Snippet */}
+             {/* Daily Word */}
              <div className="bg-amber-50 rounded-2xl p-6 border border-amber-100 flex items-start gap-4">
-                 <Quote className="w-10 h-10 text-amber-300 shrink-0" />
+                 <div className="bg-amber-100 p-3 rounded-xl"><Quote className="w-8 h-8 text-amber-600"/></div>
                  <div>
-                     <h3 className="font-bold text-amber-900 mb-2">Daily Wisdom</h3>
-                     <p className="text-amber-800 italic font-serif">"Faith is taking the first step even when you don't see the whole staircase."</p>
+                     <h3 className="font-bold text-amber-900 mb-2 uppercase tracking-wide text-xs">Verse of the Day</h3>
+                     <p className="text-amber-900 font-serif text-xl leading-relaxed">"Faith is taking the first step even when you don't see the whole staircase."</p>
                  </div>
+             </div>
+             
+             {/* Quick Actions Grid */}
+             <div>
+                <h3 className="font-bold text-gray-800 text-lg mb-4 ml-1">Explore Features</h3>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    {[
+                        { id: 'bible', title: 'Holy Bible', icon: <BookOpen className="text-emerald-500"/>, color: 'bg-emerald-50' },
+                        { id: 'prayer_bank', title: 'Prayer Room', icon: <Shield className="text-purple-500"/>, color: 'bg-purple-50' },
+                        { id: 'tv', title: 'Gospel TV', icon: <Tv className="text-rose-500"/>, color: 'bg-rose-50' },
+                        { id: 'community', title: 'Fellowship', icon: <Users className="text-indigo-500"/>, color: 'bg-indigo-50' },
+                        { id: 'plans', title: 'Reading Plans', icon: <Calendar className="text-blue-500"/>, color: 'bg-blue-50' },
+                        { id: 'dictionary', title: 'Dictionary', icon: <Book className="text-teal-500"/>, color: 'bg-teal-50' },
+                        { id: 'hymnal', title: 'Hymnal', icon: <Music className="text-pink-500"/>, color: 'bg-pink-50' },
+                        { id: 'goals', title: 'Goals', icon: <Target className="text-orange-500"/>, color: 'bg-orange-50' },
+                    ].map(f => (
+                        <button key={f.id} onClick={() => onViewChange(f.id as ViewState)} className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm hover:shadow-lg transition-all text-left group hover:-translate-y-1">
+                            <div className={`${f.color} w-10 h-10 rounded-xl flex items-center justify-center mb-3 group-hover:scale-110 transition-transform`}>
+                                {React.cloneElement(f.icon as any, { className: `w-5 h-5 ${f.icon.props.className}` })}
+                            </div>
+                            <span className="font-bold text-gray-800 text-sm">{f.title}</span>
+                        </button>
+                    ))}
+                </div>
              </div>
         </div>
     );
@@ -1148,6 +1320,10 @@ const App = () => {
       case 'fasting': return <FastingTimer />;
       case 'tithe': return <div className="p-8 text-center text-gray-500">Tithe Calculator coming soon.</div>;
       case 'trivia': return <BibleTrivia />;
+      case 'dictionary': return <BibleDictionary />;
+      case 'plans': return <ReadingPlans />;
+      case 'prayer_bank': return <PrayerBank />;
+      case 'goals': return <SpiritualGoals />;
       
       // Treasury Items
       case 'hymnal': return <Hymnal />;
@@ -1184,19 +1360,22 @@ const App = () => {
       />
 
       <main className="flex-1 flex flex-col min-w-0 relative h-full">
-        <header className="lg:hidden bg-white border-b border-gray-200 px-4 py-3 flex items-center justify-between shrink-0 z-10 relative">
-          <button onClick={() => setMobileOpen(true)} className="text-gray-600 p-2 -ml-2"><Menu className="w-6 h-6" /></button>
-          <span className="font-serif font-bold text-gray-800 text-lg">Spiritual Welfare</span>
-          <div className="w-6" />
-        </header>
+         <header className={`h-16 flex items-center justify-between px-4 border-b shrink-0 ${darkMode ? 'bg-gray-900 border-gray-800' : 'bg-white border-spiritual-100'}`}>
+            <button onClick={() => setMobileOpen(true)} className="lg:hidden p-2 text-gray-500">
+              <Menu className="w-6 h-6" />
+            </button>
+            <div className="font-serif font-bold text-lg capitalize flex items-center gap-2">
+               {/* Optional Header Content */}
+               <span className={darkMode ? 'text-gray-200' : 'text-spiritual-800'}>{activeView.replace('_', ' ')}</span>
+            </div>
+            <div className="w-8"></div> {/* Spacer for alignment */}
+          </header>
 
-        <div className="flex-1 overflow-auto p-4 md:p-6 scroll-smooth pb-32">
-          <div className="max-w-7xl mx-auto h-full">
+          <div className="flex-1 overflow-y-auto p-4 md:p-6 pb-32 scrollbar-hide">
             {renderContent()}
           </div>
-        </div>
 
-        <GlobalPlayer media={currentMedia} onClose={() => setCurrentMedia(null)} />
+          <GlobalPlayer media={currentMedia} onClose={() => setCurrentMedia(null)} />
       </main>
     </div>
   );
