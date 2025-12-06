@@ -9,45 +9,26 @@ import {
   Film, Zap, Eye, Minimize2, Maximize2, Volume2, VolumeX, Camera, Phone, Mail,
   BadgeCheck, Download, Book, Bookmark, Calculator, Timer, FileText, Library,
   Lightbulb, Compass, CheckSquare, Headphones, Shield, Target, ArrowRight, Baby,
-  Map, Speaker, Church, Radio, Video, Image, Bell
+  Map, Speaker, Church, Radio, Video, Image, Bell, MicOff, Bot
 } from 'lucide-react';
-import { initializeApp } from "firebase/app";
-import { getAuth, signInWithPopup, GoogleAuthProvider, onAuthStateChanged, signOut, User as FirebaseUser } from "firebase/auth";
-import { getFirestore, collection, addDoc, query, orderBy, onSnapshot, limit, serverTimestamp, Timestamp } from "firebase/firestore";
-
-// --- Firebase Configuration ---
-const firebaseConfig = {
-  apiKey: "AIzaSyC5hFB3ICxzyMrlvtnQl-n-2Dkr2RFsmqc",
-  authDomain: "fir-9b1f8.firebaseapp.com",
-  projectId: "fir-9b1f8",
-  storageBucket: "fir-9b1f8.firebasestorage.app",
-  messagingSenderId: "539772525700",
-  appId: "1:539772525700:web:25b5a686877ddbf6d176d1",
-  measurementId: "G-7FWY3QB5MY"
-};
-
-const app = initializeApp(firebaseConfig);
-const auth = getAuth(app);
-const db = getFirestore(app);
-const googleProvider = new GoogleAuthProvider();
+import { GoogleGenAI } from "@google/genai";
 
 // --- Types ---
-type ViewState = 'home' | 'bible' | 'tv' | 'community' | 'testimonies' | 'sermons' | 'toolbox' | 'treasury' | 'kids' | 'about' | 'events' | 'notes' | 'fasting' | 'tithe' | 'trivia' | 'journal' | 'goals' | 'hymnal' | 'promises' | 'names' | 'dictionary' | 'plans' | 'prayer_bank';
+interface UserProfile {
+    uid: string;
+    displayName: string | null;
+    photoURL: string | null;
+    isAnonymous: boolean;
+    email?: string | null;
+}
+
+type ViewState = 'home' | 'bible' | 'tv' | 'community' | 'testimonies' | 'sermons' | 'toolbox' | 'treasury' | 'kids' | 'about' | 'events' | 'notes' | 'fasting' | 'tithe' | 'trivia' | 'journal' | 'goals' | 'hymnal' | 'promises' | 'names' | 'dictionary' | 'plans' | 'prayer_bank' | 'ai_assistant';
 
 type MediaItem = {
     id: string;
     title: string;
     type: 'video' | 'audio';
     url: string;
-};
-
-type ChatMessage = {
-    id: string;
-    text: string;
-    userId: string;
-    displayName: string;
-    photoURL: string;
-    createdAt: any; 
 };
 
 // --- Constants ---
@@ -146,6 +127,7 @@ function BriefcaseIcon({ className }: { className: string }) {
 const Sidebar = ({ activeView, onViewChange, mobileOpen, setMobileOpen, user, onSignOut, onPlayAmbient, installAction, canInstall, darkMode, toggleDarkMode }: any) => {
   const menuItems = [
     { id: 'home', label: 'Dashboard', icon: <Compass className="w-5 h-5" /> },
+    { id: 'ai_assistant', label: 'AI Spiritual Assistant', icon: <Sparkles className="w-5 h-5 text-purple-500" /> },
     { id: 'bible', label: 'Holy Bible', icon: <BookOpen className="w-5 h-5" /> },
     { id: 'tv', label: 'Gospel TV', icon: <Tv className="w-5 h-5" /> },
     { id: 'community', label: 'Chat Fellowship', icon: <MessageCircle className="w-5 h-5" /> },
@@ -252,6 +234,150 @@ const Sidebar = ({ activeView, onViewChange, mobileOpen, setMobileOpen, user, on
         </div>
       </div>
     </>
+  );
+};
+
+// --- AI Components ---
+
+const SpiritualAssistant = () => {
+  const [messages, setMessages] = useState<{role: 'user' | 'assistant', content: string}[]>([
+    { role: 'assistant', content: "Blessings! I am your Spiritual AI Assistant. I can help with prayer, scripture explanations, sermon ideas, or just a listening ear. How may I serve you today?" }
+  ]);
+  const [input, setInput] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
+  const [isSpeaking, setIsSpeaking] = useState(false);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  };
+
+  useEffect(() => {
+    scrollToBottom();
+  }, [messages]);
+
+  const speak = (text: string) => {
+    if ('speechSynthesis' in window) {
+      if (isSpeaking) {
+        window.speechSynthesis.cancel();
+        setIsSpeaking(false);
+      } else {
+        const utterance = new SpeechSynthesisUtterance(text);
+        utterance.onend = () => setIsSpeaking(false);
+        window.speechSynthesis.speak(utterance);
+        setIsSpeaking(true);
+      }
+    }
+  };
+
+  const handleSend = async () => {
+    if (!input.trim()) return;
+
+    const userMsg = input;
+    setMessages(prev => [...prev, { role: 'user', content: userMsg }]);
+    setInput("");
+    setIsLoading(true);
+
+    try {
+      // Use Gemini if available
+      let aiResponseText = "";
+      if (process.env.API_KEY) {
+          const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+          const response = await ai.models.generateContent({
+            model: 'gemini-2.5-flash',
+            contents: userMsg,
+            config: {
+                systemInstruction: "You are a gentle, biblical, uplifting Christian assistant designed for the Spiritual Welfare platform. Your tone is loving, encouraging, and scripture-based."
+            }
+          });
+          aiResponseText = response.text || "Peace be with you.";
+      } else {
+          // Offline / No Key Mode
+          await new Promise(r => setTimeout(r, 1500));
+          aiResponseText = "God loves you deeply. I am currently in 'Offline Mode' because no API Key was detected. Please configure the API Key for full AI features.";
+      }
+
+      setMessages(prev => [...prev, { role: 'assistant', content: aiResponseText }]);
+    } catch (error) {
+      setMessages(prev => [...prev, { role: 'assistant', content: "I apologize, but I am having trouble connecting to the spiritual network right now. Please try again." }]);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  return (
+    <div className="bg-white rounded-2xl h-full flex flex-col border border-gray-100 shadow-sm overflow-hidden">
+      <div className="bg-purple-600 p-4 flex items-center justify-between text-white">
+        <div className="flex items-center gap-3">
+          <div className="bg-white/20 p-2 rounded-full"><Sparkles className="w-5 h-5"/></div>
+          <div>
+            <h2 className="font-bold text-lg">Spiritual AI</h2>
+            <p className="text-xs text-purple-200">Powered by Gospel Intelligence</p>
+          </div>
+        </div>
+        <button onClick={() => setMessages([{ role: 'assistant', content: "Blessings! How may I serve you today?" }])} className="p-2 hover:bg-white/20 rounded-full" title="Reset Chat">
+            <RefreshCw className="w-4 h-4"/>
+        </button>
+      </div>
+
+      <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-gray-50">
+        {messages.map((m, i) => (
+          <div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+            <div className={`max-w-[80%] p-3 rounded-2xl ${
+              m.role === 'user' 
+                ? 'bg-purple-600 text-white rounded-tr-none' 
+                : 'bg-white text-gray-800 border border-gray-200 rounded-tl-none shadow-sm'
+            }`}>
+              <p className="whitespace-pre-wrap">{m.content}</p>
+              {m.role === 'assistant' && (
+                <button 
+                    onClick={() => speak(m.content)} 
+                    className="mt-2 text-xs opacity-70 hover:opacity-100 flex items-center gap-1"
+                >
+                    {isSpeaking ? <VolumeX className="w-3 h-3"/> : <Volume2 className="w-3 h-3"/>} 
+                    {isSpeaking ? "Stop" : "Listen"}
+                </button>
+              )}
+            </div>
+          </div>
+        ))}
+        {isLoading && (
+          <div className="flex justify-start">
+             <div className="bg-white p-3 rounded-2xl border border-gray-200 shadow-sm flex items-center gap-2">
+                <Loader2 className="w-4 h-4 animate-spin text-purple-600"/>
+                <span className="text-xs text-gray-500">Praying on it...</span>
+             </div>
+          </div>
+        )}
+        <div ref={messagesEndRef} />
+      </div>
+
+      <div className="p-4 bg-white border-t border-gray-100">
+        <div className="flex items-center gap-2 bg-gray-50 p-2 rounded-xl border border-gray-200 focus-within:ring-2 focus-within:ring-purple-200 transition-all">
+          <input 
+            className="flex-1 bg-transparent border-none outline-none text-sm px-2"
+            placeholder="Ask for prayer, verses, or guidance..."
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && handleSend()}
+          />
+          <button onClick={handleSend} disabled={isLoading} className="p-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors disabled:opacity-50">
+            {isLoading ? <Loader2 className="w-4 h-4 animate-spin"/> : <Send className="w-4 h-4"/>}
+          </button>
+        </div>
+        <div className="mt-2 flex gap-2 overflow-x-auto scrollbar-hide">
+            {["Generate a sermon on Hope", "Find verses about anxiety", "Write a prayer for my family", "Explain John 3:16"].map((suggestion, i) => (
+                <button 
+                    key={i} 
+                    onClick={() => setInput(suggestion)} 
+                    className="text-xs bg-gray-100 hover:bg-gray-200 text-gray-600 px-3 py-1 rounded-full whitespace-nowrap border border-gray-200"
+                >
+                    {suggestion}
+                </button>
+            ))}
+        </div>
+      </div>
+    </div>
   );
 };
 
@@ -699,7 +825,7 @@ const LandingPage = ({ onLogin, onGuest }: any) => (
             <div className="grid grid-cols-3 gap-2 text-xs text-gray-500">
                  <div className="flex flex-col items-center gap-1"><BookOpen className="w-4 h-4"/> Holy Bible</div>
                  <div className="flex flex-col items-center gap-1"><Tv className="w-4 h-4"/> Gospel TV</div>
-                 <div className="flex flex-col items-center gap-1"><MessageCircle className="w-4 h-4"/> Live Chat</div>
+                 <div className="flex flex-col items-center gap-1"><Sparkles className="w-4 h-4"/> AI Assistant</div>
             </div>
         </div>
         
@@ -711,7 +837,7 @@ const LandingPage = ({ onLogin, onGuest }: any) => (
 
 // Main App
 export default function App() {
-    const [user, setUser] = useState<FirebaseUser | { displayName: string, isAnonymous: boolean, photoURL: string } | null>(null);
+    const [user, setUser] = useState<UserProfile | null>(null);
     const [view, setView] = useState<ViewState>('home');
     const [mobileOpen, setMobileOpen] = useState(false);
     const [currentMedia, setCurrentMedia] = useState<MediaItem | null>(null);
@@ -719,23 +845,48 @@ export default function App() {
     const [darkMode, setDarkMode] = useState(false);
 
     useEffect(() => {
-        const unsub = onAuthStateChanged(auth, (u) => {
-            if (u) setUser(u);
-        });
+        // Initialize user from local storage
+        const storedUser = localStorage.getItem('spiritual_user');
+        if (storedUser) {
+            try {
+                setUser(JSON.parse(storedUser));
+            } catch (e) {
+                console.error("Failed to parse user", e);
+            }
+        }
+
         window.addEventListener('beforeinstallprompt', (e) => {
             e.preventDefault();
             setInstallPrompt(e);
         });
-        return () => unsub();
     }, []);
 
     const handleGoogleLogin = async () => {
-        try { await signInWithPopup(auth, googleProvider); } 
-        catch (e: any) { alert("Login failed. Please try 'Continue as Guest'."); }
+        // Mock Google Login for demo purposes
+        const mockUser: UserProfile = {
+            uid: '12345',
+            displayName: 'Faithful Believer',
+            photoURL: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Faithful',
+            isAnonymous: false,
+            email: 'believer@example.com'
+        };
+        setUser(mockUser);
+        localStorage.setItem('spiritual_user', JSON.stringify(mockUser));
     };
 
     const handleGuest = () => {
-        setUser({ displayName: "Guest Believer", isAnonymous: true, photoURL: "" });
+        const guestUser: UserProfile = { 
+            uid: `guest-${Date.now()}`,
+            displayName: "Guest Believer", 
+            isAnonymous: true, 
+            photoURL: "" 
+        };
+        setUser(guestUser);
+    };
+
+    const handleSignOut = () => {
+        setUser(null);
+        localStorage.removeItem('spiritual_user');
     };
 
     const installApp = () => {
@@ -748,6 +899,7 @@ export default function App() {
     const renderView = () => {
         switch(view) {
             case 'bible': return <BibleReader />;
+            case 'ai_assistant': return <SpiritualAssistant />;
             case 'toolbox': return <ToolboxHub onViewChange={setView} />;
             case 'treasury': return <TreasuryHub onViewChange={setView} />;
             case 'about': return <CreatorProfile />;
@@ -759,7 +911,6 @@ export default function App() {
             case 'hymnal': return <Hymnal />;
             case 'promises': return <Promises />;
             case 'prayer_bank': return <div className="p-4 h-full bg-white rounded-2xl"><h2 className="font-bold text-2xl mb-4">Prayer Bank</h2><div className="space-y-4">{[{title: "Healing", text: "Lord, heal me..."}].map((p,i)=><div key={i} className="p-4 bg-purple-50 rounded"><strong>{p.title}</strong><p>{p.text}</p></div>)}</div></div>;
-            // Add other simple views or reuse components
             default: return (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                     {/* Welcome Card */}
@@ -769,7 +920,9 @@ export default function App() {
                         <p className="opacity-90 max-w-lg text-lg">"The Lord bless thee, and keep thee: The Lord make his face shine upon thee." - Numbers 6:24</p>
                         <div className="mt-6 flex gap-3">
                             <button onClick={() => setView('bible')} className="bg-white text-spiritual-600 px-5 py-2 rounded-xl font-bold text-sm hover:bg-opacity-90 transition shadow-lg">Read Word</button>
-                            <button onClick={() => setView('toolbox')} className="bg-spiritual-700 bg-opacity-40 text-white border border-white/20 px-5 py-2 rounded-xl font-bold text-sm hover:bg-opacity-60 transition">Toolbox</button>
+                            <button onClick={() => setView('ai_assistant')} className="bg-spiritual-700 bg-opacity-40 text-white border border-white/20 px-5 py-2 rounded-xl font-bold text-sm hover:bg-opacity-60 transition flex items-center gap-2">
+                                <Sparkles className="w-4 h-4"/> AI Assistant
+                            </button>
                         </div>
                     </div>
 
@@ -780,16 +933,16 @@ export default function App() {
                         <p className="text-gray-500 text-sm mt-1">Watch 24/7 Worship & Praise</p>
                     </div>
 
+                    <div onClick={() => setView('ai_assistant')} className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 hover:shadow-md transition cursor-pointer group">
+                        <div className="bg-purple-50 w-12 h-12 rounded-xl flex items-center justify-center text-purple-500 mb-4 group-hover:bg-purple-100 transition"><Bot className="w-6 h-6"/></div>
+                        <h3 className="font-bold text-gray-900 text-lg">AI Assistant</h3>
+                        <p className="text-gray-500 text-sm mt-1">Prayer, Sermons & Advice</p>
+                    </div>
+
                     <div onClick={() => setView('community')} className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 hover:shadow-md transition cursor-pointer group">
                         <div className="bg-green-50 w-12 h-12 rounded-xl flex items-center justify-center text-green-500 mb-4 group-hover:bg-green-100 transition"><MessageCircle className="w-6 h-6"/></div>
                         <h3 className="font-bold text-gray-900 text-lg">Live Fellowship</h3>
                         <p className="text-gray-500 text-sm mt-1">Chat with believers worldwide</p>
-                    </div>
-
-                    <div onClick={() => setView('treasury')} className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 hover:shadow-md transition cursor-pointer group">
-                        <div className="bg-amber-50 w-12 h-12 rounded-xl flex items-center justify-center text-amber-500 mb-4 group-hover:bg-amber-100 transition"><Library className="w-6 h-6"/></div>
-                        <h3 className="font-bold text-gray-900 text-lg">Spiritual Treasury</h3>
-                        <p className="text-gray-500 text-sm mt-1">Hymns, Promises & Names of God</p>
                     </div>
 
                     {/* Verse of the Moment */}
@@ -815,7 +968,7 @@ export default function App() {
                 mobileOpen={mobileOpen} 
                 setMobileOpen={setMobileOpen}
                 user={user}
-                onSignOut={() => auth.signOut()}
+                onSignOut={handleSignOut}
                 onPlayAmbient={setCurrentMedia}
                 installAction={installApp}
                 canInstall={!!installPrompt}
