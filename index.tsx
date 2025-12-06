@@ -72,7 +72,8 @@ import {
   CheckSquare,
   Headphones,
   Shield,
-  Target
+  Target,
+  ArrowRight
 } from 'lucide-react';
 import { initializeApp } from "firebase/app";
 import { getAuth, signInWithPopup, GoogleAuthProvider, onAuthStateChanged, signOut, User as FirebaseUser } from "firebase/auth";
@@ -1248,26 +1249,87 @@ const Worship = ({ setMedia }: { setMedia: (m: MediaItem) => void }) => {
     );
 };
 
-// 9. Login Screen
-const LoginScreen = ({ onLogin }: { onLogin: () => void }) => {
+// 9. Login / Landing Page (SEO Optimized)
+const LandingPage = ({ onLogin }: { onLogin: () => void }) => {
     return (
-        <div className="min-h-screen bg-gradient-to-br from-spiritual-600 to-spiritual-900 flex items-center justify-center p-4">
-            <div className="bg-white rounded-3xl shadow-2xl overflow-hidden max-w-4xl w-full flex flex-col md:flex-row">
-                <div className="md:w-1/2 p-12 flex flex-col justify-center text-center md:text-left bg-spiritual-50">
-                    <div className="flex items-center justify-center md:justify-start gap-3 mb-8">
-                        <Sun className="w-10 h-10 text-spiritual-600" />
-                        <h1 className="font-serif text-2xl font-bold text-spiritual-800">Spiritual Welfare</h1>
+        <div className="min-h-screen bg-gray-50 flex flex-col">
+            {/* Hero Section */}
+            <div className="bg-gradient-to-br from-spiritual-900 to-spiritual-700 text-white">
+                <div className="max-w-6xl mx-auto px-4 py-20 md:py-32 flex flex-col md:flex-row items-center justify-between gap-12">
+                    <div className="md:w-1/2 text-center md:text-left">
+                        <div className="flex items-center justify-center md:justify-start gap-3 mb-6">
+                            <Sun className="w-10 h-10 text-yellow-400" />
+                            <h1 className="font-serif text-3xl font-bold">Spiritual Welfare</h1>
+                        </div>
+                        <h2 className="text-4xl md:text-6xl font-serif font-bold leading-tight mb-6">Your Digital Sanctuary for <span className="text-yellow-400">Faith</span> & Fellowship.</h2>
+                        <p className="text-spiritual-100 text-lg mb-8 leading-relaxed">
+                            Join thousands of believers accessing the Holy Bible, Live Gospel TV, and 24/7 Prayer Support. Created by Akin S. Sokpah to bring the Gospel to Liberia and the world.
+                        </p>
+                        <button onClick={onLogin} className="bg-white text-spiritual-900 hover:bg-spiritual-50 px-8 py-4 rounded-full font-bold text-lg flex items-center justify-center gap-3 transition-all shadow-xl hover:shadow-2xl hover:-translate-y-1 mx-auto md:mx-0">
+                            <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" className="w-6 h-6" alt="Google" />
+                            Start Your Journey
+                        </button>
                     </div>
-                    <h2 className="text-3xl font-bold text-gray-800 mb-4">Your Journey Begins Here</h2>
-                    <p className="text-gray-500 mb-8 leading-relaxed">Join our community to access features including live bible study, worship, fellowship, and personal journaling.</p>
+                    <div className="md:w-1/2">
+                        <div className="bg-white/10 backdrop-blur-md rounded-3xl p-6 border border-white/20 shadow-2xl transform rotate-3 hover:rotate-0 transition-transform">
+                             <div className="bg-white rounded-xl p-6 text-gray-800">
+                                 <h3 className="font-bold text-spiritual-600 uppercase text-xs mb-2">Verse of the Moment</h3>
+                                 <p className="font-serif text-2xl leading-relaxed mb-4">"For I know the plans I have for you," declares the Lord, "plans to prosper you and not to harm you, plans to give you hope and a future."</p>
+                                 <p className="text-right font-bold text-gray-500">- Jeremiah 29:11</p>
+                             </div>
+                        </div>
+                    </div>
                 </div>
-                <div className="md:w-1/2 p-12 flex flex-col justify-center bg-white">
-                    <button onClick={onLogin} className="w-full bg-white border border-gray-200 text-gray-700 font-semibold py-3 px-4 rounded-xl flex items-center justify-center gap-3 hover:bg-gray-50 hover:shadow-md transition-all mb-4 group">
-                        <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" className="w-5 h-5" alt="Google" />
-                        <span>Continue with Google</span>
-                        <ChevronRight className="w-4 h-4 text-gray-300 group-hover:translate-x-1 transition-transform" />
-                    </button>
-                    <p className="text-center text-xs text-gray-400 mt-6">Created by Akin S. Sokpah</p>
+            </div>
+
+            {/* Features Section (Content for SEO) */}
+            <div className="max-w-6xl mx-auto px-4 py-20">
+                <div className="text-center mb-16">
+                    <h3 className="text-spiritual-600 font-bold uppercase tracking-widest mb-2">Features</h3>
+                    <h2 className="text-3xl font-serif font-bold text-gray-900">Everything You Need to Grow Spiritually</h2>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+                    {[
+                        { title: "Holy Bible Online", icon: <BookOpen className="w-8 h-8 text-blue-500"/>, desc: "Read the King James Version (KJV) and other translations completely free. Access daily reading plans to read the Bible in a year." },
+                        { title: "24/7 Gospel TV", icon: <Tv className="w-8 h-8 text-red-500"/>, desc: "Watch live worship sessions, sermons, and Christian movies. Featuring hillsong, local Liberian gospel, and instrumental prayer music." },
+                        { title: "Prayer Wall", icon: <Shield className="w-8 h-8 text-purple-500"/>, desc: "Submit prayer requests and join a community of prayer warriors. Find prayers for healing, finance, and family protection." }
+                    ].map((f, i) => (
+                        <div key={i} className="bg-white p-8 rounded-2xl shadow-sm border border-gray-100 hover:shadow-lg transition-all">
+                            <div className="mb-4">{f.icon}</div>
+                            <h3 className="font-bold text-xl text-gray-900 mb-3">{f.title}</h3>
+                            <p className="text-gray-600 leading-relaxed">{f.desc}</p>
+                        </div>
+                    ))}
+                </div>
+            </div>
+
+            {/* FAQ Section (Rich Snippets for Google) */}
+            <div className="bg-white py-20 border-t border-gray-100">
+                <div className="max-w-4xl mx-auto px-4">
+                    <h2 className="text-3xl font-serif font-bold text-gray-900 mb-10 text-center">Frequently Asked Questions</h2>
+                    <div className="space-y-6">
+                        {[
+                            { q: "Is Spiritual Welfare free to use?", a: "Yes, Spiritual Welfare is completely free. Our mission is to spread the Gospel without cost." },
+                            { q: "Who created Spiritual Welfare?", a: "The platform was created by Akin S. Sokpah, a developer from Liberia dedicated to digital evangelism." },
+                            { q: "Can I use the app offline?", a: "Many features like the Bible reader and Journal work offline once loaded. Live TV and Chat require an internet connection." },
+                            { q: "How can I contact the creator?", a: "You can reach Akin S. Sokpah via email at sokpahakinsaye@gmail.com or on Facebook." }
+                        ].map((faq, i) => (
+                            <div key={i} className="bg-gray-50 p-6 rounded-xl">
+                                <h3 className="font-bold text-gray-900 text-lg mb-2">{faq.q}</h3>
+                                <p className="text-gray-600">{faq.a}</p>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            </div>
+
+            {/* Footer */}
+            <div className="bg-gray-900 text-gray-400 py-12 text-center">
+                <p>&copy; 2024 Spiritual Welfare. Created by Akin S. Sokpah.</p>
+                <div className="flex justify-center gap-4 mt-4">
+                    <a href="#" className="hover:text-white">Facebook</a>
+                    <a href="#" className="hover:text-white">Contact</a>
+                    <a href="#" className="hover:text-white">Privacy</a>
                 </div>
             </div>
         </div>
@@ -1307,7 +1369,7 @@ const App = () => {
   const playAmbient = (track: any) => setCurrentMedia({ id: track.id, title: `Ambient: ${track.title}`, type: track.type || 'audio', url: track.url });
 
   if (loadingAuth) return <div className="h-screen flex items-center justify-center bg-spiritual-50"><Loader2 className="w-10 h-10 text-spiritual-500 animate-spin" /></div>;
-  if (!user) return <LoginScreen onLogin={handleGoogleLogin} />;
+  if (!user) return <LandingPage onLogin={handleGoogleLogin} />;
 
   const renderContent = () => {
     switch (activeView) {
