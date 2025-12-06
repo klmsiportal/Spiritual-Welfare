@@ -1,20 +1,22 @@
 import OpenAI from 'openai';
 
 export default async function handler(req, res) {
-  // Enable CORS
+  // --- ROBUST CORS HANDLING ---
   res.setHeader('Access-Control-Allow-Credentials', true);
-  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Origin', '*'); // Allow all origins for the MVP
   res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS,PATCH,DELETE,POST,PUT');
   res.setHeader(
     'Access-Control-Allow-Headers',
     'X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version'
   );
 
+  // Handle preflight request
   if (req.method === 'OPTIONS') {
     res.status(200).end();
     return;
   }
 
+  // Only allow POST
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method Not Allowed' });
   }
@@ -22,8 +24,10 @@ export default async function handler(req, res) {
   try {
     const { message, task = 'chat' } = req.body;
 
+    // Check environment variable
     if (!process.env.OPENAI_API_KEY) {
-      return res.status(500).json({ error: 'OpenAI API Key not configured in Vercel' });
+      console.error("Missing OPENAI_API_KEY environment variable");
+      return res.status(500).json({ error: 'OpenAI API Key not configured in Vercel Settings' });
     }
 
     const openai = new OpenAI({
@@ -50,17 +54,19 @@ export default async function handler(req, res) {
     }
 
     const completion = await openai.chat.completions.create({
-      model: "gpt-4o", // Using the latest available efficient model
+      model: "gpt-4o", 
       messages: [
         { role: "system", content: systemPrompt },
         { role: "user", content: message },
       ],
       temperature: 0.7,
+      max_tokens: 1000, 
     });
 
     res.status(200).json({ reply: completion.choices[0].message.content });
   } catch (error) {
-    console.error('AI Error:', error);
+    console.error('OpenAI API Error:', error);
+    // Return the actual error message to help debugging
     res.status(500).json({ error: error.message || 'Internal Server Error' });
   }
 }

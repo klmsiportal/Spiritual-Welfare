@@ -11,6 +11,12 @@ import {
   Lightbulb, Compass, CheckSquare, Headphones, Shield, Target, ArrowRight, Baby,
   Map, Speaker, Church, Radio, Video, Image, Bell, MicOff, Bot
 } from 'lucide-react';
+import { ClerkProvider, SignedIn, SignedOut, SignIn, SignUp, UserButton, useUser, useClerk } from "@clerk/clerk-react";
+
+// --- CONFIGURATION ---
+// REPLACE THIS WITH YOUR CLERK PUBLISHABLE KEY FROM DASHBOARD
+// Example: pk_test_...
+const CLERK_PUBLISHABLE_KEY = "pk_test_YOUR_CLERK_PUBLISHABLE_KEY_HERE"; 
 
 // --- Types ---
 interface UserProfile {
@@ -122,7 +128,7 @@ function BriefcaseIcon({ className }: { className: string }) {
     return <svg className={className} xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg>
 }
 
-// Global Player Component defined here to avoid circular dependency issues
+// Global Player Component
 const GlobalPlayer = ({ media, onClose }: { media: MediaItem | null, onClose: () => void }) => {
     if (!media) return null;
 
@@ -198,7 +204,8 @@ const GlobalPlayer = ({ media, onClose }: { media: MediaItem | null, onClose: ()
 };
 
 // Sidebar Component
-const Sidebar = ({ activeView, onViewChange, mobileOpen, setMobileOpen, user, onSignOut, onPlayAmbient, installAction, canInstall, darkMode, toggleDarkMode }: any) => {
+const Sidebar = ({ activeView, onViewChange, mobileOpen, setMobileOpen, onSignOut, onPlayAmbient, installAction, canInstall, darkMode, toggleDarkMode }: any) => {
+  const { user, isLoaded } = useUser();
   const menuItems = [
     { id: 'home', label: 'Dashboard', icon: <Compass className="w-5 h-5" /> },
     { id: 'ai_assistant', label: 'AI Spiritual Assistant', icon: <Sparkles className="w-5 h-5 text-purple-500" /> },
@@ -291,19 +298,24 @@ const Sidebar = ({ activeView, onViewChange, mobileOpen, setMobileOpen, user, on
 
         <div className={`p-6 border-t ${darkMode ? 'border-gray-800 bg-gray-900' : 'border-spiritual-100 bg-white'} absolute bottom-0 w-full`}>
           <div className="flex items-center gap-3 mb-4">
-             {user?.photoURL ? (
-                <img src={user.photoURL} alt="User" className="w-8 h-8 rounded-full border border-spiritual-200" />
+             {isLoaded && user ? (
+                <>
+                    <img src={user.imageUrl} alt="User" className="w-8 h-8 rounded-full border border-spiritual-200" />
+                    <div className="overflow-hidden flex-1">
+                        <p className={`text-sm font-bold truncate ${darkMode ? 'text-gray-200' : 'text-spiritual-800'}`}>{user.fullName || user.firstName}</p>
+                        <button onClick={onSignOut} className="text-xs text-red-500 hover:text-red-700 flex items-center gap-1">
+                            <LogOut className="w-3 h-3" /> Sign Out
+                        </button>
+                    </div>
+                </>
              ) : (
-                <div className="w-8 h-8 rounded-full bg-spiritual-200 flex items-center justify-center text-spiritual-600">
-                    <User className="w-4 h-4" />
+                <div className="overflow-hidden flex-1">
+                     <p className={`text-sm font-bold truncate ${darkMode ? 'text-gray-200' : 'text-spiritual-800'}`}>Guest Believer</p>
+                     <button onClick={onSignOut} className="text-xs text-red-500 hover:text-red-700 flex items-center gap-1">
+                         <LogOut className="w-3 h-3" /> Exit
+                     </button>
                 </div>
              )}
-             <div className="overflow-hidden flex-1">
-                <p className={`text-sm font-bold truncate ${darkMode ? 'text-gray-200' : 'text-spiritual-800'}`}>{user?.displayName || 'Guest'}</p>
-                <button onClick={onSignOut} className="text-xs text-red-500 hover:text-red-700 flex items-center gap-1">
-                    <LogOut className="w-3 h-3" /> {user?.isAnonymous ? 'Exit Guest' : 'Sign Out'}
-                </button>
-             </div>
           </div>
         </div>
       </div>
@@ -337,7 +349,6 @@ const SpiritualAssistant = () => {
         window.speechSynthesis.cancel();
         setIsSpeaking(false);
       } else {
-        // Strip markdown characters for better speech
         const cleanText = text.replace(/[\*#]/g, '');
         const utterance = new SpeechSynthesisUtterance(cleanText);
         utterance.rate = 0.9;
@@ -358,7 +369,6 @@ const SpiritualAssistant = () => {
     setIsLoading(true);
 
     try {
-      // Connect to Vercel Backend Function
       const response = await fetch('/api/spiritual-assistant', {
         method: 'POST',
         headers: {
@@ -370,21 +380,25 @@ const SpiritualAssistant = () => {
         })
       });
 
-      const data = await response.json();
-
+      // Specific Error Handling for connection issues
+      if (response.status === 404) {
+          throw new Error("Backend API not found. Please ensure the /api folder is deployed correctly to Vercel.");
+      }
+      if (response.status === 500) {
+          const errData = await response.json();
+          throw new Error(errData.error || "Server Error. Check OPENAI_API_KEY in Vercel.");
+      }
       if (!response.ok) {
-          throw new Error(data.error || "Failed to connect to Spirit Server");
+          throw new Error(`Connection Error: ${response.statusText}`);
       }
 
+      const data = await response.json();
       const reply = data.reply;
       setMessages(prev => [...prev, { role: 'assistant', content: reply }]);
       
-      // Auto-speak in voice mode if enabled (optional logic, disabled by default to not annoy)
     } catch (error: any) {
       console.error(error);
-      const errorMsg = error.message?.includes("API Key") 
-        ? "Please ensure the OpenAI API Key is configured in Vercel settings." 
-        : "I apologize, but I am having trouble connecting to the spiritual network right now. Please try again.";
+      const errorMsg = `⚠️ Error: ${error.message}`;
       setMessages(prev => [...prev, { role: 'assistant', content: errorMsg }]);
     } finally {
       setIsLoading(false);
@@ -817,8 +831,8 @@ const BibleReader = () => {
     );
 };
 
-// Landing Page (Guest Mode)
-const LandingPage = ({ onLogin, onGuest }: any) => (
+// Landing Page (Clerk & Guest Mode)
+const LandingPage = ({ onGuest }: any) => (
     <div className="min-h-screen bg-gradient-to-br from-spiritual-50 to-white flex flex-col items-center justify-center p-6 relative overflow-hidden">
         <div className="absolute top-0 left-0 w-full h-full overflow-hidden pointer-events-none">
              <div className="absolute top-[-10%] left-[-10%] w-96 h-96 bg-blue-100 rounded-full mix-blend-multiply filter blur-3xl opacity-30 animate-pulse-slow"></div>
@@ -836,11 +850,9 @@ const LandingPage = ({ onLogin, onGuest }: any) => (
             </div>
 
             <div className="bg-white/80 backdrop-blur-sm rounded-2xl p-6 shadow-lg border border-white space-y-4">
-                <button onClick={onLogin} className="w-full flex items-center justify-center gap-3 bg-white border border-gray-200 text-gray-700 font-semibold py-3 px-4 rounded-xl hover:bg-gray-50 transition-all shadow-sm group">
-                    <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" className="w-5 h-5" alt="G" />
-                    <span>Sign in with Google</span>
-                    <ArrowRight className="w-4 h-4 opacity-0 group-hover:opacity-100 transition-opacity" />
-                </button>
+                <div className="w-full">
+                    <SignIn />
+                </div>
                 
                 <div className="relative flex py-2 items-center">
                     <div className="flex-grow border-t border-gray-200"></div>
@@ -866,9 +878,9 @@ const LandingPage = ({ onLogin, onGuest }: any) => (
     </div>
 );
 
-// Main App
-export default function App() {
-    const [user, setUser] = useState<UserProfile | null>(null);
+// Main Authenticated App Wrapper
+const AuthenticatedApp = ({ signOut }: any) => {
+    const { user } = useUser();
     const [view, setView] = useState<ViewState>('home');
     const [mobileOpen, setMobileOpen] = useState(false);
     const [currentMedia, setCurrentMedia] = useState<MediaItem | null>(null);
@@ -876,49 +888,11 @@ export default function App() {
     const [darkMode, setDarkMode] = useState(false);
 
     useEffect(() => {
-        // Initialize user from local storage
-        const storedUser = localStorage.getItem('spiritual_user');
-        if (storedUser) {
-            try {
-                setUser(JSON.parse(storedUser));
-            } catch (e) {
-                console.error("Failed to parse user", e);
-            }
-        }
-
         window.addEventListener('beforeinstallprompt', (e) => {
             e.preventDefault();
             setInstallPrompt(e);
         });
     }, []);
-
-    const handleGoogleLogin = async () => {
-        // Mock Google Login for demo purposes
-        const mockUser: UserProfile = {
-            uid: '12345',
-            displayName: 'Faithful Believer',
-            photoURL: 'https://api.dicebear.com/7.x/avataaars/svg?seed=Faithful',
-            isAnonymous: false,
-            email: 'believer@example.com'
-        };
-        setUser(mockUser);
-        localStorage.setItem('spiritual_user', JSON.stringify(mockUser));
-    };
-
-    const handleGuest = () => {
-        const guestUser: UserProfile = { 
-            uid: `guest-${Date.now()}`,
-            displayName: "Guest Believer", 
-            isAnonymous: true, 
-            photoURL: "" 
-        };
-        setUser(guestUser);
-    };
-
-    const handleSignOut = () => {
-        setUser(null);
-        localStorage.removeItem('spiritual_user');
-    };
 
     const installApp = () => {
         if (installPrompt) {
@@ -947,7 +921,7 @@ export default function App() {
                     {/* Welcome Card */}
                     <div className="col-span-full bg-gradient-to-r from-spiritual-600 to-indigo-600 rounded-3xl p-8 text-white shadow-xl relative overflow-hidden">
                         <div className="absolute right-0 top-0 w-64 h-64 bg-white opacity-10 rounded-full blur-3xl transform translate-x-1/2 -translate-y-1/2"></div>
-                        <h2 className="font-serif text-3xl font-bold mb-2">Welcome, {user?.displayName?.split(' ')[0]}!</h2>
+                        <h2 className="font-serif text-3xl font-bold mb-2">Welcome, {user?.firstName || 'Believer'}!</h2>
                         <p className="opacity-90 max-w-lg text-lg">"The Lord bless thee, and keep thee: The Lord make his face shine upon thee." - Numbers 6:24</p>
                         <div className="mt-6 flex gap-3">
                             <button onClick={() => setView('bible')} className="bg-white text-spiritual-600 px-5 py-2 rounded-xl font-bold text-sm hover:bg-opacity-90 transition shadow-lg">Read Word</button>
@@ -989,8 +963,6 @@ export default function App() {
         }
     };
 
-    if (!user) return <LandingPage onLogin={handleGoogleLogin} onGuest={handleGuest} />;
-
     return (
         <div className={`flex h-screen ${darkMode ? 'bg-gray-900' : 'bg-[#f4f7fb]'} font-sans text-gray-900 overflow-hidden`}>
             <Sidebar 
@@ -998,8 +970,7 @@ export default function App() {
                 onViewChange={setView} 
                 mobileOpen={mobileOpen} 
                 setMobileOpen={setMobileOpen}
-                user={user}
-                onSignOut={handleSignOut}
+                onSignOut={signOut}
                 onPlayAmbient={setCurrentMedia}
                 installAction={installApp}
                 canInstall={!!installPrompt}
@@ -1026,6 +997,28 @@ export default function App() {
                 <GlobalPlayer media={currentMedia} onClose={() => setCurrentMedia(null)} />
             </main>
         </div>
+    );
+};
+
+// Root App Component
+export default function App() {
+    const [guestMode, setGuestMode] = useState(false);
+    const { signOut } = useClerk();
+
+    if (guestMode) {
+        // Wrap Guest Mode in AuthenticatedApp logic but without Clerk User
+        return <AuthenticatedApp signOut={() => setGuestMode(false)} />;
+    }
+
+    return (
+        <ClerkProvider publishableKey={CLERK_PUBLISHABLE_KEY}>
+            <SignedOut>
+                <LandingPage onGuest={() => setGuestMode(true)} />
+            </SignedOut>
+            <SignedIn>
+                <AuthenticatedApp signOut={() => signOut()} />
+            </SignedIn>
+        </ClerkProvider>
     );
 }
 
