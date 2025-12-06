@@ -11,7 +11,6 @@ import {
   Lightbulb, Compass, CheckSquare, Headphones, Shield, Target, ArrowRight, Baby,
   Map, Speaker, Church, Radio, Video, Image, Bell, MicOff, Bot
 } from 'lucide-react';
-import { GoogleGenAI } from "@google/genai";
 
 // --- Types ---
 interface UserProfile {
@@ -122,6 +121,81 @@ const EVENTS = [
 function BriefcaseIcon({ className }: { className: string }) {
     return <svg className={className} xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg>
 }
+
+// Global Player Component defined here to avoid circular dependency issues
+const GlobalPlayer = ({ media, onClose }: { media: MediaItem | null, onClose: () => void }) => {
+    if (!media) return null;
+
+    const isYoutubeId = media.type === 'video' && /^[a-zA-Z0-9_-]{11}$/.test(media.url);
+
+    return (
+        <div className="fixed bottom-0 right-0 left-0 lg:left-64 bg-white border-t border-gray-200 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.1)] z-40">
+            <div className="max-w-7xl mx-auto p-2 md:p-3 flex items-center justify-between gap-4">
+                <div className="flex items-center gap-3 min-w-0 flex-1 md:flex-none md:w-64">
+                    <div className={`w-10 h-10 rounded-lg flex items-center justify-center shrink-0 ${media.type === 'video' ? 'bg-red-100 text-red-500' : 'bg-blue-100 text-blue-500'}`}>
+                        {media.type === 'video' ? <Tv className="w-5 h-5" /> : <Music className="w-5 h-5" />}
+                    </div>
+                    <div className="overflow-hidden min-w-0">
+                        <h4 className="font-bold text-sm text-gray-900 truncate">{media.title}</h4>
+                        <p className="text-xs text-gray-500 truncate">Now Playing</p>
+                    </div>
+                </div>
+
+                <div className="hidden md:flex flex-1 justify-center items-center max-w-xl">
+                    {media.type === 'audio' ? (
+                        <audio controls autoPlay className="w-full h-10">
+                            <source src={media.url} type="audio/mpeg" />
+                        </audio>
+                    ) : (
+                        <div className="relative h-24 aspect-video bg-black rounded-lg overflow-hidden">
+                             {isYoutubeId ? (
+                                <iframe 
+                                    src={`https://www.youtube.com/embed/${media.url}?autoplay=1`}
+                                    title={media.title}
+                                    className="w-full h-full"
+                                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                                    allowFullScreen
+                                />
+                             ) : (
+                                <video controls autoPlay className="w-full h-full">
+                                    <source src={media.url} type="video/mp4" />
+                                </video>
+                             )}
+                        </div>
+                    )}
+                </div>
+
+                <button onClick={onClose} className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-full shrink-0">
+                    <X className="w-6 h-6" />
+                </button>
+            </div>
+             <div className="md:hidden">
+                 {media.type === 'video' ? (
+                     <div className="p-2 bg-black">
+                        {isYoutubeId ? (
+                            <iframe 
+                                src={`https://www.youtube.com/embed/${media.url}?autoplay=1`}
+                                className="w-full aspect-video rounded-lg"
+                                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                                allowFullScreen
+                            />
+                        ) : (
+                            <video controls autoPlay className="w-full aspect-video rounded-lg">
+                                <source src={media.url} type="video/mp4" />
+                            </video>
+                        )}
+                     </div>
+                 ) : (
+                    <div className="px-4 pb-2">
+                        <audio controls autoPlay className="w-full h-10">
+                            <source src={media.url} type="audio/mpeg" />
+                        </audio>
+                    </div>
+                 )}
+            </div>
+        </div>
+    );
+};
 
 // Sidebar Component
 const Sidebar = ({ activeView, onViewChange, mobileOpen, setMobileOpen, user, onSignOut, onPlayAmbient, installAction, canInstall, darkMode, toggleDarkMode }: any) => {
@@ -246,6 +320,7 @@ const SpiritualAssistant = () => {
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
+  const [mode, setMode] = useState<'chat' | 'sermon' | 'prayer' | 'bible_search' | 'tv_recommend'>('chat');
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const scrollToBottom = () => {
@@ -262,7 +337,11 @@ const SpiritualAssistant = () => {
         window.speechSynthesis.cancel();
         setIsSpeaking(false);
       } else {
-        const utterance = new SpeechSynthesisUtterance(text);
+        // Strip markdown characters for better speech
+        const cleanText = text.replace(/[\*#]/g, '');
+        const utterance = new SpeechSynthesisUtterance(cleanText);
+        utterance.rate = 0.9;
+        utterance.pitch = 1.0;
         utterance.onend = () => setIsSpeaking(false);
         window.speechSynthesis.speak(utterance);
         setIsSpeaking(true);
@@ -279,27 +358,34 @@ const SpiritualAssistant = () => {
     setIsLoading(true);
 
     try {
-      // Use Gemini if available
-      let aiResponseText = "";
-      if (process.env.API_KEY) {
-          const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-          const response = await ai.models.generateContent({
-            model: 'gemini-2.5-flash',
-            contents: userMsg,
-            config: {
-                systemInstruction: "You are a gentle, biblical, uplifting Christian assistant designed for the Spiritual Welfare platform. Your tone is loving, encouraging, and scripture-based."
-            }
-          });
-          aiResponseText = response.text || "Peace be with you.";
-      } else {
-          // Offline / No Key Mode
-          await new Promise(r => setTimeout(r, 1500));
-          aiResponseText = "God loves you deeply. I am currently in 'Offline Mode' because no API Key was detected. Please configure the API Key for full AI features.";
+      // Connect to Vercel Backend Function
+      const response = await fetch('/api/spiritual-assistant', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+            message: userMsg,
+            task: mode
+        })
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+          throw new Error(data.error || "Failed to connect to Spirit Server");
       }
 
-      setMessages(prev => [...prev, { role: 'assistant', content: aiResponseText }]);
-    } catch (error) {
-      setMessages(prev => [...prev, { role: 'assistant', content: "I apologize, but I am having trouble connecting to the spiritual network right now. Please try again." }]);
+      const reply = data.reply;
+      setMessages(prev => [...prev, { role: 'assistant', content: reply }]);
+      
+      // Auto-speak in voice mode if enabled (optional logic, disabled by default to not annoy)
+    } catch (error: any) {
+      console.error(error);
+      const errorMsg = error.message?.includes("API Key") 
+        ? "Please ensure the OpenAI API Key is configured in Vercel settings." 
+        : "I apologize, but I am having trouble connecting to the spiritual network right now. Please try again.";
+      setMessages(prev => [...prev, { role: 'assistant', content: errorMsg }]);
     } finally {
       setIsLoading(false);
     }
@@ -307,36 +393,65 @@ const SpiritualAssistant = () => {
 
   return (
     <div className="bg-white rounded-2xl h-full flex flex-col border border-gray-100 shadow-sm overflow-hidden">
-      <div className="bg-purple-600 p-4 flex items-center justify-between text-white">
-        <div className="flex items-center gap-3">
-          <div className="bg-white/20 p-2 rounded-full"><Sparkles className="w-5 h-5"/></div>
-          <div>
-            <h2 className="font-bold text-lg">Spiritual AI</h2>
-            <p className="text-xs text-purple-200">Powered by Gospel Intelligence</p>
-          </div>
+      <div className="bg-gradient-to-r from-purple-700 to-indigo-800 p-4 text-white">
+        <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-3">
+            <div className="bg-white/20 p-2 rounded-full"><Sparkles className="w-5 h-5"/></div>
+            <div>
+                <h2 className="font-bold text-lg">Spiritual AI</h2>
+                <p className="text-xs text-purple-200">GPT-4o Backend Connected</p>
+            </div>
+            </div>
+            <button onClick={() => setMessages([{ role: 'assistant', content: "Blessings! How may I serve you today?" }])} className="p-2 hover:bg-white/20 rounded-full" title="Reset Chat">
+                <RefreshCw className="w-4 h-4"/>
+            </button>
         </div>
-        <button onClick={() => setMessages([{ role: 'assistant', content: "Blessings! How may I serve you today?" }])} className="p-2 hover:bg-white/20 rounded-full" title="Reset Chat">
-            <RefreshCw className="w-4 h-4"/>
-        </button>
+
+        {/* Mode Selector */}
+        <div className="flex gap-2 overflow-x-auto scrollbar-hide pb-2">
+            {[
+                {id: 'chat', label: 'Chat', icon: <MessageCircle className="w-3 h-3"/>},
+                {id: 'prayer', label: 'Prayer Warrior', icon: <Heart className="w-3 h-3"/>},
+                {id: 'sermon', label: 'Sermon Gen', icon: <Book className="w-3 h-3"/>},
+                {id: 'bible_search', label: 'Bible Search', icon: <Search className="w-3 h-3"/>},
+                {id: 'tv_recommend', label: 'TV Guide', icon: <Tv className="w-3 h-3"/>},
+            ].map((m) => (
+                <button 
+                    key={m.id}
+                    onClick={() => setMode(m.id as any)}
+                    className={`px-3 py-1.5 rounded-full text-xs font-bold flex items-center gap-2 transition-all ${mode === m.id ? 'bg-white text-purple-700 shadow-md' : 'bg-purple-900/30 text-purple-100 hover:bg-purple-900/50'}`}
+                >
+                    {m.icon} {m.label}
+                </button>
+            ))}
+        </div>
       </div>
 
       <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-gray-50">
         {messages.map((m, i) => (
           <div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-            <div className={`max-w-[80%] p-3 rounded-2xl ${
+            <div className={`max-w-[85%] p-3 rounded-2xl ${
               m.role === 'user' 
                 ? 'bg-purple-600 text-white rounded-tr-none' 
                 : 'bg-white text-gray-800 border border-gray-200 rounded-tl-none shadow-sm'
             }`}>
-              <p className="whitespace-pre-wrap">{m.content}</p>
+              <div className="whitespace-pre-wrap text-sm leading-relaxed">{m.content}</div>
               {m.role === 'assistant' && (
-                <button 
-                    onClick={() => speak(m.content)} 
-                    className="mt-2 text-xs opacity-70 hover:opacity-100 flex items-center gap-1"
-                >
-                    {isSpeaking ? <VolumeX className="w-3 h-3"/> : <Volume2 className="w-3 h-3"/>} 
-                    {isSpeaking ? "Stop" : "Listen"}
-                </button>
+                <div className="mt-2 flex gap-2 border-t pt-2 border-gray-100">
+                    <button 
+                        onClick={() => speak(m.content)} 
+                        className="text-xs text-gray-500 hover:text-purple-600 flex items-center gap-1 transition-colors"
+                    >
+                        {isSpeaking ? <VolumeX className="w-3 h-3"/> : <Volume2 className="w-3 h-3"/>} 
+                        {isSpeaking ? "Stop" : "Read Aloud"}
+                    </button>
+                    <button 
+                        onClick={() => navigator.clipboard.writeText(m.content)}
+                        className="text-xs text-gray-500 hover:text-purple-600 flex items-center gap-1 transition-colors"
+                    >
+                        <Copy className="w-3 h-3"/> Copy
+                    </button>
+                </div>
               )}
             </div>
           </div>
@@ -345,7 +460,9 @@ const SpiritualAssistant = () => {
           <div className="flex justify-start">
              <div className="bg-white p-3 rounded-2xl border border-gray-200 shadow-sm flex items-center gap-2">
                 <Loader2 className="w-4 h-4 animate-spin text-purple-600"/>
-                <span className="text-xs text-gray-500">Praying on it...</span>
+                <span className="text-xs text-gray-500">
+                    {mode === 'prayer' ? 'Interceding...' : mode === 'sermon' ? 'Drafting Sermon...' : 'Thinking...'}
+                </span>
              </div>
           </div>
         )}
@@ -353,28 +470,17 @@ const SpiritualAssistant = () => {
       </div>
 
       <div className="p-4 bg-white border-t border-gray-100">
-        <div className="flex items-center gap-2 bg-gray-50 p-2 rounded-xl border border-gray-200 focus-within:ring-2 focus-within:ring-purple-200 transition-all">
+        <div className="flex items-center gap-2 bg-gray-50 p-2 rounded-xl border border-gray-200 focus-within:ring-2 focus-within:ring-purple-200 transition-all shadow-inner">
           <input 
             className="flex-1 bg-transparent border-none outline-none text-sm px-2"
-            placeholder="Ask for prayer, verses, or guidance..."
+            placeholder={mode === 'chat' ? "Ask anything..." : mode === 'prayer' ? "What do you need prayer for?" : mode === 'sermon' ? "Topic for sermon?" : "Search Bible..."}
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && handleSend()}
           />
-          <button onClick={handleSend} disabled={isLoading} className="p-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors disabled:opacity-50">
+          <button onClick={handleSend} disabled={isLoading} className="p-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors disabled:opacity-50 shadow-md">
             {isLoading ? <Loader2 className="w-4 h-4 animate-spin"/> : <Send className="w-4 h-4"/>}
           </button>
-        </div>
-        <div className="mt-2 flex gap-2 overflow-x-auto scrollbar-hide">
-            {["Generate a sermon on Hope", "Find verses about anxiety", "Write a prayer for my family", "Explain John 3:16"].map((suggestion, i) => (
-                <button 
-                    key={i} 
-                    onClick={() => setInput(suggestion)} 
-                    className="text-xs bg-gray-100 hover:bg-gray-200 text-gray-600 px-3 py-1 rounded-full whitespace-nowrap border border-gray-200"
-                >
-                    {suggestion}
-                </button>
-            ))}
         </div>
       </div>
     </div>
@@ -706,81 +812,6 @@ const BibleReader = () => {
                         </p>
                     </div>
                 )}
-            </div>
-        </div>
-    );
-};
-
-// Global Media Player Component
-const GlobalPlayer = ({ media, onClose }: { media: MediaItem | null, onClose: () => void }) => {
-    if (!media) return null;
-
-    const isYoutubeId = media.type === 'video' && /^[a-zA-Z0-9_-]{11}$/.test(media.url);
-
-    return (
-        <div className="fixed bottom-0 right-0 left-0 lg:left-64 bg-white border-t border-gray-200 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.1)] z-40">
-            <div className="max-w-7xl mx-auto p-2 md:p-3 flex items-center justify-between gap-4">
-                <div className="flex items-center gap-3 min-w-0 flex-1 md:flex-none md:w-64">
-                    <div className={`w-10 h-10 rounded-lg flex items-center justify-center shrink-0 ${media.type === 'video' ? 'bg-red-100 text-red-500' : 'bg-blue-100 text-blue-500'}`}>
-                        {media.type === 'video' ? <Tv className="w-5 h-5" /> : <Music className="w-5 h-5" />}
-                    </div>
-                    <div className="overflow-hidden min-w-0">
-                        <h4 className="font-bold text-sm text-gray-900 truncate">{media.title}</h4>
-                        <p className="text-xs text-gray-500 truncate">Now Playing</p>
-                    </div>
-                </div>
-
-                <div className="hidden md:flex flex-1 justify-center items-center max-w-xl">
-                    {media.type === 'audio' ? (
-                        <audio controls autoPlay className="w-full h-10">
-                            <source src={media.url} type="audio/mpeg" />
-                        </audio>
-                    ) : (
-                        <div className="relative h-24 aspect-video bg-black rounded-lg overflow-hidden">
-                             {isYoutubeId ? (
-                                <iframe 
-                                    src={`https://www.youtube.com/embed/${media.url}?autoplay=1`}
-                                    title={media.title}
-                                    className="w-full h-full"
-                                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                                    allowFullScreen
-                                />
-                             ) : (
-                                <video controls autoPlay className="w-full h-full">
-                                    <source src={media.url} type="video/mp4" />
-                                </video>
-                             )}
-                        </div>
-                    )}
-                </div>
-
-                <button onClick={onClose} className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-full shrink-0">
-                    <X className="w-6 h-6" />
-                </button>
-            </div>
-             <div className="md:hidden">
-                 {media.type === 'video' ? (
-                     <div className="p-2 bg-black">
-                        {isYoutubeId ? (
-                            <iframe 
-                                src={`https://www.youtube.com/embed/${media.url}?autoplay=1`}
-                                className="w-full aspect-video rounded-lg"
-                                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                                allowFullScreen
-                            />
-                        ) : (
-                            <video controls autoPlay className="w-full aspect-video rounded-lg">
-                                <source src={media.url} type="video/mp4" />
-                            </video>
-                        )}
-                     </div>
-                 ) : (
-                    <div className="px-4 pb-2">
-                        <audio controls autoPlay className="w-full h-10">
-                            <source src={media.url} type="audio/mpeg" />
-                        </audio>
-                    </div>
-                 )}
             </div>
         </div>
     );
