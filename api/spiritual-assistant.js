@@ -1,4 +1,4 @@
-import OpenAI from 'openai';
+import { GoogleGenAI } from "@google/genai";
 
 export default async function handler(req, res) {
   // --- ROBUST CORS HANDLING ---
@@ -25,14 +25,12 @@ export default async function handler(req, res) {
     const { message, task = 'chat' } = req.body;
 
     // Check environment variable
-    if (!process.env.OPENAI_API_KEY) {
-      console.error("Missing OPENAI_API_KEY environment variable");
-      return res.status(500).json({ error: 'OpenAI API Key not configured in Vercel Settings' });
+    if (!process.env.API_KEY) {
+      console.error("Missing API_KEY environment variable");
+      return res.status(500).json({ error: 'API Key not configured in Vercel Settings' });
     }
 
-    const openai = new OpenAI({
-      apiKey: process.env.OPENAI_API_KEY,
-    });
+    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
     let systemPrompt = `You are Spiritual AI, a gentle, biblical, uplifting Christian assistant for "Spiritual Welfare 2025".
     Tone: Loving, Encouraging, Scripture-based, Safe, Non-denominational but Jesus-centered.
@@ -53,19 +51,17 @@ export default async function handler(req, res) {
         systemPrompt += "\nTASK: Recommend 3 specific gospel songs, worship artists, or channels that match the user's mood.";
     }
 
-    const completion = await openai.chat.completions.create({
-      model: "gpt-4o", 
-      messages: [
-        { role: "system", content: systemPrompt },
-        { role: "user", content: message },
-      ],
-      temperature: 0.7,
-      max_tokens: 1000, 
+    const response = await ai.models.generateContent({
+      model: "gemini-2.5-flash",
+      contents: message,
+      config: {
+        systemInstruction: systemPrompt,
+      },
     });
 
-    res.status(200).json({ reply: completion.choices[0].message.content });
+    res.status(200).json({ reply: response.text });
   } catch (error) {
-    console.error('OpenAI API Error:', error);
+    console.error('Gemini API Error:', error);
     // Return the actual error message to help debugging
     res.status(500).json({ error: error.message || 'Internal Server Error' });
   }
