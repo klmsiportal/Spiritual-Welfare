@@ -277,7 +277,7 @@ const Sidebar = ({ activeView, onViewChange, mobileOpen, setMobileOpen, user, on
              <div className="overflow-hidden flex-1">
                 <p className={`text-sm font-bold truncate ${darkMode ? 'text-gray-200' : 'text-spiritual-800'}`}>{user?.displayName || 'Guest'}</p>
                 <button onClick={onSignOut} className="text-xs text-red-500 hover:text-red-700 flex items-center gap-1">
-                    <LogOut className="w-3 h-3" /> Sign Out
+                    <LogOut className="w-3 h-3" /> {user?.isAnonymous ? 'Exit Guest' : 'Sign Out'}
                 </button>
              </div>
           </div>
@@ -1058,7 +1058,7 @@ const Dashboard = ({ onViewChange, user }: { onViewChange: (view: ViewState) => 
              {/* Header Card */}
              <div className="bg-gradient-to-r from-spiritual-700 to-spiritual-900 rounded-3xl p-8 text-white shadow-xl relative overflow-hidden">
                  <div className="relative z-10">
-                     <h1 className="font-serif text-4xl font-bold mb-2">Welcome, {user.displayName?.split(' ')[0]}</h1>
+                     <h1 className="font-serif text-4xl font-bold mb-2">Welcome, {user.displayName?.split(' ')[0] || 'Believer'}</h1>
                      <p className="text-spiritual-100 mb-6 max-w-lg font-serif italic text-lg">"The Lord bless you and keep you; the Lord make his face shine on you..." - Numbers 6:24</p>
                      <div className="flex gap-3">
                         <button onClick={copyLink} className="bg-white text-spiritual-900 hover:bg-spiritual-50 px-6 py-3 rounded-full text-sm font-bold flex items-center gap-2 transition-all shadow-lg transform hover:-translate-y-1">
@@ -1131,6 +1131,10 @@ const CommunityChat = ({ user }: { user: FirebaseUser }) => {
     const sendMessage = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!newMessage.trim()) return;
+        if (user.isAnonymous) {
+             alert("Guest users cannot post in the public chat. Please sign in with Google to participate.");
+             return;
+        }
         await addDoc(collection(db, "chat_messages"), {
             text: newMessage,
             userId: user.uid,
@@ -1168,8 +1172,8 @@ const CommunityChat = ({ user }: { user: FirebaseUser }) => {
                 <div ref={dummyRef}></div>
             </div>
             <form onSubmit={sendMessage} className="p-4 bg-white border-t border-gray-100 flex gap-2">
-                <input className="flex-1 border border-gray-200 rounded-full px-4 py-2 focus:outline-none focus:ring-2 focus:ring-spiritual-300" placeholder="Share a blessing..." value={newMessage} onChange={(e) => setNewMessage(e.target.value)} />
-                <button type="submit" className="bg-spiritual-600 text-white p-2 rounded-full"><Send className="w-5 h-5"/></button>
+                <input className="flex-1 border border-gray-200 rounded-full px-4 py-2 focus:outline-none focus:ring-2 focus:ring-spiritual-300" placeholder={user.isAnonymous ? "Sign in to chat..." : "Share a blessing..."} value={newMessage} onChange={(e) => setNewMessage(e.target.value)} disabled={user.isAnonymous} />
+                <button type="submit" className="bg-spiritual-600 text-white p-2 rounded-full disabled:opacity-50" disabled={user.isAnonymous}><Send className="w-5 h-5"/></button>
             </form>
         </div>
     );
@@ -1250,7 +1254,7 @@ const Worship = ({ setMedia }: { setMedia: (m: MediaItem) => void }) => {
 };
 
 // 9. Login / Landing Page (SEO Optimized)
-const LandingPage = ({ onLogin }: { onLogin: () => void }) => {
+const LandingPage = ({ onLogin, onGuest }: { onLogin: () => void, onGuest: () => void }) => {
     return (
         <div className="min-h-screen bg-gray-50 flex flex-col">
             {/* Hero Section */}
@@ -1265,10 +1269,15 @@ const LandingPage = ({ onLogin }: { onLogin: () => void }) => {
                         <p className="text-spiritual-100 text-lg mb-8 leading-relaxed">
                             Join thousands of believers accessing the Holy Bible, Live Gospel TV, and 24/7 Prayer Support. Created by Akin S. Sokpah to bring the Gospel to Liberia and the world.
                         </p>
-                        <button onClick={onLogin} className="bg-white text-spiritual-900 hover:bg-spiritual-50 px-8 py-4 rounded-full font-bold text-lg flex items-center justify-center gap-3 transition-all shadow-xl hover:shadow-2xl hover:-translate-y-1 mx-auto md:mx-0">
-                            <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" className="w-6 h-6" alt="Google" />
-                            Start Your Journey
-                        </button>
+                        <div className="flex flex-col items-center md:items-start gap-4">
+                            <button onClick={onLogin} className="bg-white text-spiritual-900 hover:bg-spiritual-50 px-8 py-4 rounded-full font-bold text-lg flex items-center justify-center gap-3 transition-all shadow-xl hover:shadow-2xl hover:-translate-y-1 w-full md:w-auto">
+                                <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" className="w-6 h-6" alt="Google" />
+                                Start Your Journey
+                            </button>
+                            <button onClick={onGuest} className="text-white/70 hover:text-white underline text-sm transition-colors">
+                                Continue as Guest (Skip Login)
+                            </button>
+                        </div>
                     </div>
                     <div className="md:w-1/2">
                         <div className="bg-white/10 backdrop-blur-md rounded-3xl p-6 border border-white/20 shadow-2xl transform rotate-3 hover:rotate-0 transition-transform">
@@ -1357,8 +1366,38 @@ const App = () => {
   }, []);
 
   const handleGoogleLogin = async () => {
-      try { await signInWithPopup(auth, googleProvider); } catch (error) { console.error("Login failed", error); }
+      try { 
+          await signInWithPopup(auth, googleProvider); 
+      } catch (error: any) { 
+          console.error("Login failed", error);
+          if (error.code === 'auth/unauthorized-domain') {
+              alert("Configuration Notice: This domain (spiritual-welfare.vercel.app) is not yet authorized in Firebase.\n\nTo fix: Go to Firebase Console > Authentication > Settings > Authorized Domains and add it.\n\nFor now, you can use the 'Continue as Guest' button to access the full app.");
+          } else {
+              alert("Login failed: " + error.message);
+          }
+      }
   };
+
+  const handleGuestLogin = () => {
+    setUser({
+        uid: 'guest',
+        displayName: 'Guest Believer',
+        email: null,
+        photoURL: null,
+        emailVerified: false,
+        isAnonymous: true,
+        metadata: {},
+        providerData: [],
+        refreshToken: '',
+        tenantId: null,
+        delete: async () => {},
+        getIdToken: async () => '',
+        getIdTokenResult: async () => ({} as any),
+        reload: async () => {},
+        toJSON: () => ({})
+    } as FirebaseUser);
+  };
+
   const handleSignOut = () => signOut(auth);
   const handleInstallClick = async () => {
       if (!deferredPrompt) return;
@@ -1369,7 +1408,7 @@ const App = () => {
   const playAmbient = (track: any) => setCurrentMedia({ id: track.id, title: `Ambient: ${track.title}`, type: track.type || 'audio', url: track.url });
 
   if (loadingAuth) return <div className="h-screen flex items-center justify-center bg-spiritual-50"><Loader2 className="w-10 h-10 text-spiritual-500 animate-spin" /></div>;
-  if (!user) return <LandingPage onLogin={handleGoogleLogin} />;
+  if (!user) return <LandingPage onLogin={handleGoogleLogin} onGuest={handleGuestLogin} />;
 
   const renderContent = () => {
     switch (activeView) {
